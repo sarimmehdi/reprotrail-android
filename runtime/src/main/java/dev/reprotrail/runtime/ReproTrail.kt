@@ -1,10 +1,13 @@
 package dev.reprotrail.runtime
 
+import android.app.Activity
 import android.content.Context
+import android.view.MotionEvent
 import android.view.View
 import org.koin.core.KoinApplication
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -29,6 +32,21 @@ public class ReproTrail private constructor(
         get() = graph.configuration
 
     private val closed = AtomicBoolean(false)
+
+    /** Observes an Activity touch event without consuming or redispatching it. */
+    public fun captureTouchEvent(
+        activity: Activity,
+        event: MotionEvent,
+    ) {
+        check(!closed.get()) { "This ReproTrail recorder is closed." }
+        graph.captureRuntime.capture(activity.window.decorView, event)
+    }
+
+    /** Exports all taps captured by this instance to the app-specific trace directory. */
+    public fun exportLatestTrace(): File {
+        check(!closed.get()) { "This ReproTrail recorder is closed." }
+        return graph.captureRuntime.exportLatest()
+    }
 
     /** Releases only this recorder's private dependency graph. */
     override fun close() {
@@ -69,11 +87,15 @@ private class IsolatedRuntimeGraph(
                 module {
                     single<Context> { context }
                     single { configuration }
+                    single { TraceCaptureRuntime(get(), get()) }
                 },
             )
         }
 
     val configuration: ReproTrailConfig
+        get() = application.koin.get()
+
+    val captureRuntime: TraceCaptureRuntime
         get() = application.koin.get()
 
     override fun close() {
