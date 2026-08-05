@@ -13,12 +13,16 @@ sealed interface DataError : Error {
     enum class Local : DataError {
         /** The device has no remaining space for the write. */
         DISK_FULL,
+
         /** The database rejected the requested operation. */
         DATABASE_ERROR,
+
         /** Stored content could not be decoded. */
         CORRUPTED_DATA,
+
         /** A filesystem read or write failed. */
         IO_ERROR,
+
         /** The failure did not match a known category. */
         UNKNOWN,
     }
