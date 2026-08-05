@@ -2,4 +2,8 @@
 <resources>
     <string name="app_name">ReproTrail</string>
     <string name="app_ready_message">Your Android skeleton is ready.</string>
+    <string name="sample_title">ReproTrail View capture fixture</string>
+    <string name="capture_target">Capture this tap</string>
+    <string name="capture_ready">Ready to capture one tap.</string>
+    <string name="capture_complete">Captured tap %1$d\n%2$s</string>
 </resources>
