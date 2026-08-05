@@ -1,0 +1,3 @@
+[submodule "tools/clean-android-skeleton-gradle-plugin"]
+	path = tools/clean-android-skeleton-gradle-plugin
+	url = https://github.com/sarimmehdi/clean-android-skeleton-gradle-plugin.git
