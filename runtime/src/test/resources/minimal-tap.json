@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0.0-alpha.1",
+  "session": {
+    "id": "018f1f4e-7b2a-7c81-9f8d-9d9dd7f3f441",
+    "startedAt": "2026-08-05T10:15:30.000Z",
+    "recorder": {
+      "name": "reprotrail-android",
+      "version": "1.0.0-alpha.1"
+    }
+  },
+  "application": {
+    "packageName": "dev.reprotrail.fixture"
+  },
+  "environment": {
+    "platform": "android",
+    "apiLevel": 36,
+    "deviceClass": "phone",
+    "display": {
+      "widthPx": 1080,
+      "heightPx": 2400,
+      "densityDpi": 420,
+      "orientation": "portrait"
+    },
+    "locale": "en-US",
+    "uiMode": "light",
+    "fontScale": 1.0
+  },
+  "privacy": {
+    "captureMode": "internal",
+    "policyVersion": "fixture-policy-1",
+    "textCapture": "disabled",
+    "selectorText": "disabled",
+    "consent": {
+      "status": "not_required"
+    }
+  },
+  "actions": [
+    {
+      "id": "018f1f4e-8aef-7bb8-a846-e8c86a0d57af",
+      "sequence": 0,
+      "offsetMs": 1250,
+      "type": "tap",
+      "target": {
+        "selectors": [
+          {
+            "type": "replayId",
+            "value": "checkout.submit",
+            "source": "host_provided"
+          }
+        ]
+      }
+    }
+  ]
+}
