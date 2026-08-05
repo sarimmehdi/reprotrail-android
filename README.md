@@ -37,7 +37,7 @@ The repository foundation was generated with [`com.sarim.clean-android-skeleton`
 Prerequisites:
 
 - JDK 21
-- Android SDK platform 37
+- Android SDK platform 37.0
 - Git submodules
 
 Clone and run the same gate as CI:
