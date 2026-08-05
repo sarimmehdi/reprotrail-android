@@ -5,6 +5,7 @@ plugins {
 
 android {
     namespace = "dev.reprotrail.runtime"
+    testOptions.unitTests.isIncludeAndroidResources = true
 }
 
 dependencies {

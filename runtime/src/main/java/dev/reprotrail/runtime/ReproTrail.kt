@@ -1,6 +1,7 @@
 package dev.reprotrail.runtime
 
 import android.content.Context
+import android.view.View
 import org.koin.core.KoinApplication
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
@@ -41,6 +42,19 @@ public class ReproTrail private constructor(
             context: Context,
             configuration: ReproTrailConfig,
         ): ReproTrail = ReproTrail(IsolatedRuntimeGraph(context.applicationContext, configuration))
+
+        /** Assigns a stable, privacy-reviewed semantic identity to a host View. */
+        public fun setReplayId(
+            view: View,
+            replayId: String,
+        ) {
+            require(replayId.isNotBlank() && replayId.length <= MAX_REPLAY_ID_LENGTH) {
+                "A replay ID must contain between 1 and 255 non-blank characters."
+            }
+            view.setTag(R.id.reprotrail_replay_id_tag, replayId)
+        }
+
+        private const val MAX_REPLAY_ID_LENGTH = 255
     }
 }
 
