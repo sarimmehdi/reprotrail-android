@@ -111,12 +111,78 @@ class ReproTrailCaptureTest {
         assertTrue(runCatching { ReproTrailStorageConfig(maxPendingActions = 0) }.isFailure)
     }
 
+    @Test
+    fun `privacy kill switch pauses capture until explicit resume`() =
+        runTest {
+            val (activity, button) = fixture()
+            activity.deleteDatabase("reprotrail.db")
+            ReproTrail.setReplayId(button, "privacy.target")
+            val runtime = ReproTrail.create(activity, ReproTrailConfig(policyVersion = "privacy-policy"))
+
+            runtime.startRecording()
+            tap(runtime, activity, 1_000)
+            runtime.setCaptureEnabled(false)
+            assertEquals(ReproTrailRecordingState.PAUSED, runtime.recordingState)
+            tap(runtime, activity, 2_000)
+            assertTrue(runCatching { runtime.resumeRecording() }.isFailure)
+
+            runtime.setCaptureEnabled(true)
+            assertEquals(ReproTrailRecordingState.PAUSED, runtime.recordingState)
+            runtime.resumeRecording()
+            tap(runtime, activity, 3_000)
+            runtime.stopRecording()
+
+            val actions =
+                Json
+                    .parseToJsonElement(runtime.exportLatestTrace().readText())
+                    .jsonObject
+                    .getValue("actions")
+                    .jsonArray
+            assertEquals(2, actions.size)
+            runtime.close()
+            activity.deleteDatabase("reprotrail.db")
+        }
+
+    @Test
+    fun `privacy kill switch can reject session start`() =
+        runTest {
+            val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+            val runtime =
+                ReproTrail.create(
+                    activity,
+                    ReproTrailConfig(
+                        policyVersion = "privacy-policy",
+                        privacy = ReproTrailPrivacyConfig(captureEnabledAtStartup = false),
+                    ),
+                )
+
+            assertTrue(runCatching { runtime.startRecording() }.isFailure)
+            runtime.close()
+        }
+
     private fun event(
         action: Int,
         x: Float,
         y: Float,
         eventTime: Long,
     ): MotionEvent = MotionEvent.obtain(1_000, eventTime, action, x, y, 0)
+
+    private fun fixture(): Pair<Activity, Button> {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val button = Button(activity).apply { id = R.id.reprotrail_test_target }
+        activity.setContentView(FrameLayout(activity).apply { addView(button, frame(100, 80, 50, 120)) })
+        layout(activity.window.decorView)
+        return activity to button
+    }
+
+    private fun tap(
+        runtime: ReproTrail,
+        activity: Activity,
+        eventTime: Long,
+    ) {
+        runtime.captureTouchEvent(activity, event(MotionEvent.ACTION_DOWN, 75f, 150f, eventTime))
+        runtime.captureTouchEvent(activity, event(MotionEvent.ACTION_UP, 75f, 150f, eventTime + 100))
+    }
 
     private fun layout(root: View) {
         root.measure(exactly(400), exactly(800))

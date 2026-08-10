@@ -26,13 +26,18 @@ internal class TraceCaptureRuntime(
     private var activeSession: ActiveSession? = null
 
     @Volatile
+    var isCaptureEnabled: Boolean = configuration.privacy.captureEnabledAtStartup
+        private set
+
+    @Volatile
     var recordingState: ReproTrailRecordingState = ReproTrailRecordingState.IDLE
         private set
 
     suspend fun startRecording(): String =
         lifecycleMutex.withLock {
             check(recordingState == ReproTrailRecordingState.IDLE) { "A trace session is already active." }
-            val session = newSession()
+            check(isCaptureEnabled) { "Capture is disabled by privacy policy." }
+            val session = newSession(context)
             repository.startSession(
                 session =
                     StoredTraceSession(
@@ -65,6 +70,7 @@ internal class TraceCaptureRuntime(
 
     suspend fun resumeRecording() =
         lifecycleMutex.withLock {
+            check(isCaptureEnabled) { "Capture is disabled by privacy policy." }
             val session = requireSession(ReproTrailRecordingState.PAUSED)
             repository.updateSessionState(session.id, StoredTraceSessionState.ACTIVE)
             synchronized(stateLock) { recordingState = ReproTrailRecordingState.RECORDING }
@@ -81,6 +87,16 @@ internal class TraceCaptureRuntime(
                     }
                 }
             worker.completeSession(session.id, session.startedElapsedMs)
+        }
+
+    suspend fun setCaptureEnabled(enabled: Boolean) =
+        lifecycleMutex.withLock {
+            isCaptureEnabled = enabled
+            val session = activeSession
+            if (!enabled && recordingState == ReproTrailRecordingState.RECORDING && session != null) {
+                synchronized(stateLock) { recordingState = ReproTrailRecordingState.PAUSED }
+                repository.updateSessionState(session.id, StoredTraceSessionState.PAUSED)
+            }
         }
 
     fun capture(
@@ -155,32 +171,31 @@ internal class TraceCaptureRuntime(
             checkNotNull(activeSession)
         }
 
-    private fun newSession(): ActiveSession =
-        ActiveSession(
-            id = newId(),
-            startedAt = Instant.now().toString(),
-            startedElapsedMs = SystemClock.elapsedRealtime(),
-            detector =
-                TapGestureDetector(
-                    touchSlopPx = ViewConfiguration.get(context).scaledTouchSlop.toFloat(),
-                    maxTapDurationMs = MAX_TAP_DURATION_MS,
-                ),
-        )
-
-    private data class ActiveSession(
-        val id: String,
-        val startedAt: String,
-        val startedElapsedMs: Long,
-        val detector: TapGestureDetector,
-        var nextSequence: Int = 0,
-    )
-
     private companion object {
-        const val MAX_TAP_DURATION_MS = 500L
         const val EXPORT_DIRECTORY = "reprotrail"
         const val LATEST_TRACE_FILE = "latest-trace.json"
     }
 }
+
+private data class ActiveSession(
+    val id: String,
+    val startedAt: String,
+    val startedElapsedMs: Long,
+    val detector: TapGestureDetector,
+    var nextSequence: Int = 0,
+)
+
+private fun newSession(context: Context): ActiveSession =
+    ActiveSession(
+        id = newId(),
+        startedAt = Instant.now().toString(),
+        startedElapsedMs = SystemClock.elapsedRealtime(),
+        detector =
+            TapGestureDetector(
+                touchSlopPx = ViewConfiguration.get(context).scaledTouchSlop.toFloat(),
+                maxTapDurationMs = 500L,
+            ),
+    )
 
 private fun MotionEvent.toPointerAction(): PointerAction? {
     if (pointerCount > 1) return PointerAction.CANCEL

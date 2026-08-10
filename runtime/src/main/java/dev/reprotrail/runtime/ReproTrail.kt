@@ -19,10 +19,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * @property policyVersion host-defined version of the capture policy applied to every exported trace.
  * @property storage bounded local persistence configuration.
+ * @property privacy host-controlled privacy safety switches.
  */
 public data class ReproTrailConfig(
     val policyVersion: String,
     val storage: ReproTrailStorageConfig = ReproTrailStorageConfig(),
+    val privacy: ReproTrailPrivacyConfig = ReproTrailPrivacyConfig(),
+)
+
+/** Configures privacy controls that are evaluated before an action can be persisted. */
+public data class ReproTrailPrivacyConfig(
+    /** Whether a host may start or resume capture when this recorder is created. */
+    val captureEnabledAtStartup: Boolean = true,
 )
 
 /** Bounds local trace retention and the recorder's non-blocking persistence queue. */
@@ -71,6 +79,10 @@ public class ReproTrail private constructor(
     public val recordingState: ReproTrailRecordingState
         get() = graph.captureRuntime.recordingState
 
+    /** Whether privacy policy currently permits capture to start or resume. */
+    public val isCaptureEnabled: Boolean
+        get() = graph.captureRuntime.isCaptureEnabled
+
     /** Starts a new durable trace session and returns its stable identifier. */
     public suspend fun startRecording(): String {
         checkOpen()
@@ -93,6 +105,12 @@ public class ReproTrail private constructor(
     public suspend fun stopRecording() {
         checkOpen()
         graph.captureRuntime.stopRecording()
+    }
+
+    /** Applies a host or remote privacy kill switch without silently resuming capture. */
+    public suspend fun setCaptureEnabled(enabled: Boolean) {
+        checkOpen()
+        graph.captureRuntime.setCaptureEnabled(enabled)
     }
 
     /** Observes an Activity touch event without consuming or redispatching it. */
