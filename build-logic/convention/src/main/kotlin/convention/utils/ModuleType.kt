@@ -1,6 +1,7 @@
 package convention.utils
 
 enum class ModuleType {
+    SDK,
     DOMAIN,
     DATA,
     DI,
@@ -9,3 +10,6 @@ enum class ModuleType {
     UTILS,
     UI,
 }
+
+internal val ModuleType.dependsOnAppUtils: Boolean
+    get() = this != ModuleType.SDK

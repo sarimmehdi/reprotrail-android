@@ -10,5 +10,9 @@ android {
 }
 
 libraryConfig {
-    moduleType.set(ModuleType.DOMAIN)
+    moduleType.set(ModuleType.SDK)
+}
+
+dependencies {
+    implementation(libs.kotlinxCoroutinesCoreLibrary)
 }

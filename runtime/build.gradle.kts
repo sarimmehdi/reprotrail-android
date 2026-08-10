@@ -1,3 +1,5 @@
+import convention.utils.ModuleType
+
 plugins {
     alias(libs.plugins.conventionLibraryPluginId)
     alias(libs.plugins.kotlinSerializationPlugin)
@@ -6,6 +8,10 @@ plugins {
 android {
     namespace = "dev.reprotrail.runtime"
     testOptions.unitTests.isIncludeAndroidResources = true
+}
+
+libraryConfig {
+    moduleType.set(ModuleType.SDK)
 }
 
 dependencies {

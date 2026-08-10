@@ -12,7 +12,7 @@ android {
 }
 
 libraryConfig {
-    moduleType.set(ModuleType.DATA)
+    moduleType.set(ModuleType.SDK)
     internalDependencies.set(
         listOf(
             ":runtime:domain",

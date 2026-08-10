@@ -11,6 +11,7 @@ import convention.common.configurePresentationDebugPreviewSourceSet
 import convention.common.configureToolSettings
 import convention.utils.AndroidLibraryExtension
 import convention.utils.ModuleType
+import convention.utils.dependsOnAppUtils
 import convention.utils.libs
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -60,16 +61,19 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
                 val type = extension.moduleType.get()
 
                 dependencies {
+                    if (type.dependsOnAppUtils) {
+                        add("implementation", project(":utils"))
+                    }
+
                     when (type) {
+                        ModuleType.SDK -> Unit
                         ModuleType.DOMAIN -> {
-                            add("implementation", project(":utils"))
                             add("implementation", libs.kotlinxCoroutinesCoreLibrary)
                         }
                         ModuleType.DATA,
                         ModuleType.DI,
-                        -> add("implementation", project(":utils"))
+                        -> Unit
                         ModuleType.PRESENTATION -> {
-                            add("implementation", project(":utils"))
                             add("implementation", project(":ui"))
                             add("implementation", project(":nav"))
                             add("implementation", libs.nav3RuntimeLibrary)
@@ -78,14 +82,12 @@ class AndroidLibraryConventionPlugin : Plugin<Project> {
                             addPresentationDebugPreviewDependencies()
                         }
                         ModuleType.NAV -> {
-                            add("implementation", project(":utils"))
                             add("implementation", libs.bundles.koinBundle)
                             add("implementation", libs.bundles.navBundle)
                         }
                         ModuleType.UTILS ->
                             add("implementation", libs.androidxDatastoreLibrary)
                         ModuleType.UI -> {
-                            add("implementation", project(":utils"))
                             add("implementation", project(":nav"))
                         }
                     }
