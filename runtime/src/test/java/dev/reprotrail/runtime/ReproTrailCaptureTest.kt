@@ -109,7 +109,62 @@ class ReproTrailCaptureTest {
         assertTrue(runCatching { ReproTrailStorageConfig(maxRetainedSessions = 0) }.isFailure)
         assertTrue(runCatching { ReproTrailStorageConfig(maxActionsPerSession = 0) }.isFailure)
         assertTrue(runCatching { ReproTrailStorageConfig(maxPendingActions = 0) }.isFailure)
+        assertTrue(runCatching { ReproTrailPrivacyConfig(visibleSelectorAllowlist = setOf(" ")) }.isFailure)
     }
+
+    @Test
+    fun `allowlisted visible selectors persist with privacy classification`() =
+        runTest {
+            val (activity, button) = fixture()
+            activity.deleteDatabase("reprotrail.db")
+            button.text = "Pay now"
+            button.contentDescription = "Submit payment"
+            val runtime =
+                ReproTrail.create(
+                    activity,
+                    ReproTrailConfig(
+                        policyVersion = "visible-policy",
+                        privacy =
+                            ReproTrailPrivacyConfig(
+                                visibleSelectorAllowlist = setOf("Pay now", "Submit payment"),
+                            ),
+                    ),
+                )
+
+            runtime.startRecording()
+            tap(runtime, activity, 1_000)
+            runtime.stopRecording()
+            val document = Json.parseToJsonElement(runtime.exportLatestTrace().readText()).jsonObject
+            val selectors =
+                document
+                    .getValue("actions")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+                    .getValue("target")
+                    .jsonObject
+                    .getValue("selectors")
+                    .jsonArray
+
+            assertEquals(
+                listOf("resourceId", "text", "contentDescription", "coordinate"),
+                selectors.map {
+                    it.jsonObject
+                        .getValue("type")
+                        .jsonPrimitive.content
+                },
+            )
+            assertEquals(
+                "allowlisted",
+                document
+                    .getValue("privacy")
+                    .jsonObject
+                    .getValue("selectorText")
+                    .jsonPrimitive.content,
+            )
+            runtime.close()
+            activity.deleteDatabase("reprotrail.db")
+        }
 
     @Test
     fun `privacy kill switch pauses capture until explicit resume`() =

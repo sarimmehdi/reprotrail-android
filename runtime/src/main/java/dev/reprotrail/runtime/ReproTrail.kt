@@ -31,7 +31,19 @@ public data class ReproTrailConfig(
 public data class ReproTrailPrivacyConfig(
     /** Whether a host may start or resume capture when this recorder is created. */
     val captureEnabledAtStartup: Boolean = true,
-)
+    /** Exact visible strings approved for text or content-description selectors. */
+    val visibleSelectorAllowlist: Set<String> = emptySet(),
+) {
+    init {
+        require(visibleSelectorAllowlist.all { it.isNotBlank() && it.length <= MAX_VISIBLE_SELECTOR_LENGTH }) {
+            "Visible selector allowlist entries must contain between 1 and 1,000 non-blank characters."
+        }
+    }
+
+    private companion object {
+        const val MAX_VISIBLE_SELECTOR_LENGTH = 1_000
+    }
+}
 
 /** Bounds local trace retention and the recorder's non-blocking persistence queue. */
 public data class ReproTrailStorageConfig(

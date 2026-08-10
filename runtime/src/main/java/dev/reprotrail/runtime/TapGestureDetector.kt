@@ -7,14 +7,31 @@ internal enum class PointerAction {
     CANCEL,
 }
 
-internal data class TapPoint(
+internal sealed interface DetectedGesture
+
+internal data class DetectedTap(
     val x: Float,
     val y: Float,
-)
+) : DetectedGesture
 
-internal class TapGestureDetector(
+internal data class DetectedLongPress(
+    val x: Float,
+    val y: Float,
+    val durationMs: Long,
+) : DetectedGesture
+
+internal data class DetectedSwipe(
+    val startX: Float,
+    val startY: Float,
+    val endX: Float,
+    val endY: Float,
+    val durationMs: Long,
+) : DetectedGesture
+
+internal class PointerGestureDetector(
     private val touchSlopPx: Float,
     private val maxTapDurationMs: Long,
+    private val maxGestureDurationMs: Long = 60_000,
 ) {
     private var gesture: GestureStart? = null
 
@@ -23,42 +40,64 @@ internal class TapGestureDetector(
         x: Float,
         y: Float,
         eventTimeMs: Long,
-    ): TapPoint? =
+    ): DetectedGesture? =
         when (action) {
             PointerAction.DOWN -> {
                 gesture = GestureStart(x, y, eventTimeMs)
                 null
             }
             PointerAction.MOVE -> {
-                cancelWhenOutsideSlop(x, y)
+                recordMovement(x, y)
                 null
             }
-            PointerAction.UP -> completeTap(x, y, eventTimeMs)
+            PointerAction.UP -> completeGesture(x, y, eventTimeMs)
             PointerAction.CANCEL -> {
                 gesture = null
                 null
             }
         }
 
-    private fun cancelWhenOutsideSlop(
+    private fun recordMovement(
         x: Float,
         y: Float,
     ) {
         val start = gesture ?: return
-        if (distanceSquared(start.x, start.y, x, y) > touchSlopPx * touchSlopPx) gesture = null
+        if (movedOutsideSlop(start, x, y)) start.movedBeyondSlop = true
     }
 
-    private fun completeTap(
+    private fun completeGesture(
         x: Float,
         y: Float,
         eventTimeMs: Long,
-    ): TapPoint? {
-        val start = gesture ?: return null
+    ): DetectedGesture? {
+        val start = gesture
         gesture = null
-        val duration = eventTimeMs - start.eventTimeMs
-        val stayedWithinSlop = distanceSquared(start.x, start.y, x, y) <= touchSlopPx * touchSlopPx
-        return TapPoint(x, y).takeIf { duration in 0..maxTapDurationMs && stayedWithinSlop }
+        return start?.let { classifyGesture(it, x, y, eventTimeMs) }
     }
+
+    private fun classifyGesture(
+        start: GestureStart,
+        x: Float,
+        y: Float,
+        eventTimeMs: Long,
+    ): DetectedGesture? {
+        val duration = eventTimeMs - start.eventTimeMs
+        if (duration !in 0..maxGestureDurationMs) return null
+        val moved = start.movedBeyondSlop || movedOutsideSlop(start, x, y)
+        return when {
+            moved && duration > 0 && (start.x != x || start.y != y) ->
+                DetectedSwipe(start.x, start.y, x, y, duration)
+            !moved && duration <= maxTapDurationMs -> DetectedTap(x, y)
+            !moved && duration > maxTapDurationMs -> DetectedLongPress(x, y, duration)
+            else -> null
+        }
+    }
+
+    private fun movedOutsideSlop(
+        start: GestureStart,
+        x: Float,
+        y: Float,
+    ): Boolean = distanceSquared(start.x, start.y, x, y) > touchSlopPx * touchSlopPx
 
     private fun distanceSquared(
         startX: Float,
@@ -75,5 +114,6 @@ internal class TapGestureDetector(
         val x: Float,
         val y: Float,
         val eventTimeMs: Long,
+        var movedBeyondSlop: Boolean = false,
     )
 }

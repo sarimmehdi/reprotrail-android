@@ -4,6 +4,7 @@ import android.app.Application
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.TextView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -58,6 +59,37 @@ class ViewTargetResolverTest {
         assertTrue(target.selectors.none { it is ReplayIdSelector || it is ResourceIdSelector })
     }
 
+    @Test
+    fun `visible selectors require exact host allowlisting and preserve ranking`() {
+        val root = rootView()
+        val label =
+            TextView(application()).apply {
+                id = R.id.reprotrail_test_target
+                text = "Pay now"
+                contentDescription = "Submit payment"
+                isClickable = true
+            }
+        root.addView(label, frame(width = 200, height = 100, left = 100, top = 200))
+        layout(root)
+
+        val blocked = ViewTargetResolver.resolve(root, 150f, 250f)
+        val allowed =
+            ViewTargetResolver.resolve(
+                root,
+                150f,
+                250f,
+                visibleSelectorAllowlist = setOf("Pay now", "Submit payment"),
+            )
+
+        assertEquals(listOf("resourceId", "coordinate"), blocked.selectors.map(::selectorType))
+        assertEquals(
+            listOf("resourceId", "text", "contentDescription", "coordinate"),
+            allowed.selectors.map(::selectorType),
+        )
+        assertEquals("Pay now", (allowed.selectors[1] as TextSelector).value)
+        assertEquals("Submit payment", (allowed.selectors[2] as ContentDescriptionSelector).value)
+    }
+
     private fun rootView(): FrameLayout = FrameLayout(application())
 
     private fun layout(root: FrameLayout) {
@@ -84,6 +116,8 @@ class ViewTargetResolverTest {
         when (selector) {
             is ReplayIdSelector -> "replayId"
             is ResourceIdSelector -> "resourceId"
+            is TextSelector -> "text"
+            is ContentDescriptionSelector -> "contentDescription"
             is CoordinateSelector -> "coordinate"
         }
 }

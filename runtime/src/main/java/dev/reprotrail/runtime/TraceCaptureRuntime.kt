@@ -14,6 +14,7 @@ import java.io.File
 import java.time.Instant
 import java.util.UUID
 import kotlin.math.max
+import kotlin.math.min
 
 internal class TraceCaptureRuntime(
     private val context: Context,
@@ -110,15 +111,15 @@ internal class TraceCaptureRuntime(
                 if (session == null || pointerAction == null) {
                     null
                 } else {
-                    session.detector.onEvent(pointerAction, event.x, event.y, event.eventTime)?.let { tap ->
+                    session.detector.onEvent(pointerAction, event.x, event.y, event.eventTime)?.let { gesture ->
                         PersistAction(
                             sessionId = session.id,
                             action =
-                                TapAction(
-                                    id = newId(),
-                                    sequence = session.nextSequence++,
-                                    offsetMs = max(0, event.eventTime - session.startedElapsedMs),
-                                    target = ViewTargetResolver.resolve(root, tap.x, tap.y),
+                                gesture.toTraceAction(
+                                    session,
+                                    root,
+                                    event.eventTime,
+                                    configuration.privacy.visibleSelectorAllowlist,
                                 ),
                             environmentJson = TraceJson.encodeEnvironment(EnvironmentCapture.from(context, root)),
                         )
@@ -137,6 +138,7 @@ internal class TraceCaptureRuntime(
             checkNotNull(trace.session.environmentJson) {
                 "The latest completed trace does not contain an eligible action."
             }
+        val actions = trace.actions.map { TraceJson.decodeAction(it.payloadJson) }
         val document =
             TraceDocument(
                 session =
@@ -148,8 +150,12 @@ internal class TraceCaptureRuntime(
                     ),
                 application = TraceApplication(packageName = trace.session.packageName),
                 environment = TraceJson.decodeEnvironment(environment),
-                privacy = TracePrivacy(policyVersion = trace.session.policyVersion),
-                actions = trace.actions.map { TraceJson.decodeAction(it.payloadJson) },
+                privacy =
+                    TracePrivacy(
+                        policyVersion = trace.session.policyVersion,
+                        selectorText = if (actions.any(TraceAction::hasVisibleSelector)) "allowlisted" else "disabled",
+                    ),
+                actions = actions,
             )
         val directory = File(context.getExternalFilesDir(null) ?: context.filesDir, EXPORT_DIRECTORY)
         check(directory.exists() || directory.mkdirs()) { "Could not create trace export directory." }
@@ -181,7 +187,7 @@ private data class ActiveSession(
     val id: String,
     val startedAt: String,
     val startedElapsedMs: Long,
-    val detector: TapGestureDetector,
+    val detector: PointerGestureDetector,
     var nextSequence: Int = 0,
 )
 
@@ -191,7 +197,7 @@ private fun newSession(context: Context): ActiveSession =
         startedAt = Instant.now().toString(),
         startedElapsedMs = SystemClock.elapsedRealtime(),
         detector =
-            TapGestureDetector(
+            PointerGestureDetector(
                 touchSlopPx = ViewConfiguration.get(context).scaledTouchSlop.toFloat(),
                 maxTapDurationMs = 500L,
             ),
@@ -209,3 +215,60 @@ private fun MotionEvent.toPointerAction(): PointerAction? {
 }
 
 private fun newId(): String = UUID.randomUUID().toString()
+
+private fun DetectedGesture.toTraceAction(
+    session: ActiveSession,
+    root: View,
+    eventTimeMs: Long,
+    visibleSelectorAllowlist: Set<String>,
+): TraceAction {
+    val id = newId()
+    val sequence = session.nextSequence++
+    val offsetMs = max(0, eventTimeMs - session.startedElapsedMs)
+    return when (this) {
+        is DetectedTap ->
+            TapAction(
+                id,
+                sequence,
+                offsetMs,
+                ViewTargetResolver.resolve(root, x, y, visibleSelectorAllowlist),
+            )
+        is DetectedLongPress ->
+            LongPressAction(
+                id,
+                sequence,
+                offsetMs,
+                durationMs,
+                ViewTargetResolver.resolve(root, x, y, visibleSelectorAllowlist),
+            )
+        is DetectedSwipe ->
+            SwipeAction(
+                id = id,
+                sequence = sequence,
+                offsetMs = offsetMs,
+                start = normalizedPoint(startX, startY, root),
+                end = normalizedPoint(endX, endY, root),
+                durationMs = durationMs,
+            )
+    }
+}
+
+private fun normalizedPoint(
+    x: Float,
+    y: Float,
+    root: View,
+): NormalizedPoint =
+    NormalizedPoint(
+        x = min(1.0, max(0.0, x.toDouble() / root.width)),
+        y = min(1.0, max(0.0, y.toDouble() / root.height)),
+    )
+
+private fun TraceAction.hasVisibleSelector(): Boolean {
+    val target =
+        when (this) {
+            is TapAction -> target
+            is LongPressAction -> target
+            is SwipeAction -> null
+        }
+    return target?.selectors?.any { it is TextSelector || it is ContentDescriptionSelector } == true
+}

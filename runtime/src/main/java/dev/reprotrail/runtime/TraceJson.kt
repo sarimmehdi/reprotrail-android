@@ -105,6 +105,33 @@ internal data class TapAction(
 ) : TraceAction
 
 @Serializable
+@SerialName("longPress")
+internal data class LongPressAction(
+    override val id: String,
+    override val sequence: Int,
+    override val offsetMs: Long,
+    val durationMs: Long,
+    val target: TraceTarget,
+) : TraceAction
+
+@Serializable
+@SerialName("swipe")
+internal data class SwipeAction(
+    override val id: String,
+    override val sequence: Int,
+    override val offsetMs: Long,
+    val start: NormalizedPoint,
+    val end: NormalizedPoint,
+    val durationMs: Long,
+) : TraceAction
+
+@Serializable
+internal data class NormalizedPoint(
+    val x: Double,
+    val y: Double,
+)
+
+@Serializable
 internal data class TraceTarget(
     val component: String? = null,
     val bounds: NormalizedBounds? = null,
@@ -133,6 +160,24 @@ internal data class ReplayIdSelector(
 @SerialName("resourceId")
 internal data class ResourceIdSelector(
     val value: String,
+    val source: String = "captured",
+) : TraceSelector
+
+@Serializable
+@SerialName("text")
+internal data class TextSelector(
+    val value: String,
+    val match: String = "exact",
+    val classification: String = "allowlisted",
+    val source: String = "captured",
+) : TraceSelector
+
+@Serializable
+@SerialName("contentDescription")
+internal data class ContentDescriptionSelector(
+    val value: String,
+    val match: String = "exact",
+    val classification: String = "allowlisted",
     val source: String = "captured",
 ) : TraceSelector
 

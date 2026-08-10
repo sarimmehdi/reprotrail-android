@@ -3,6 +3,7 @@ package dev.reprotrail.runtime
 import android.content.res.Resources
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TextView
 import kotlin.math.max
 import kotlin.math.min
 
@@ -11,10 +12,12 @@ internal object ViewTargetResolver {
         root: View,
         x: Float,
         y: Float,
+        visibleSelectorAllowlist: Set<String> = emptySet(),
     ): TraceTarget {
         require(root.width > 0 && root.height > 0) { "The activity content must be laid out before capture." }
         val hit = deepestActionableView(root, x, y, originX = 0, originY = 0) ?: LocatedView(root, 0, 0)
-        val selectors = buildSelectors(hit.view, x, y, root.width, root.height)
+        val coordinate = CoordinateSelector(x = normalize(x, root.width), y = normalize(y, root.height))
+        val selectors = buildSelectors(hit.view, coordinate, visibleSelectorAllowlist)
         return TraceTarget(
             component = hit.view.javaClass.name,
             bounds = normalizedBounds(hit, root.width, root.height),
@@ -59,22 +62,24 @@ internal object ViewTargetResolver {
 
     private fun buildSelectors(
         view: View,
-        x: Float,
-        y: Float,
-        rootWidth: Int,
-        rootHeight: Int,
+        coordinate: CoordinateSelector,
+        visibleSelectorAllowlist: Set<String>,
     ): List<TraceSelector> =
         buildList {
             (view.getTag(R.id.reprotrail_replay_id_tag) as? String)
                 ?.takeIf(String::isNotBlank)
                 ?.let { add(ReplayIdSelector(it)) }
             resourceName(view)?.let { add(ResourceIdSelector(it)) }
-            add(
-                CoordinateSelector(
-                    x = normalize(x, rootWidth),
-                    y = normalize(y, rootHeight),
-                ),
-            )
+            (view as? TextView)
+                ?.text
+                ?.toString()
+                ?.takeIf(visibleSelectorAllowlist::contains)
+                ?.let { add(TextSelector(it)) }
+            view.contentDescription
+                ?.toString()
+                ?.takeIf(visibleSelectorAllowlist::contains)
+                ?.let { add(ContentDescriptionSelector(it)) }
+            add(coordinate)
         }
 
     private fun resourceName(view: View): String? {
