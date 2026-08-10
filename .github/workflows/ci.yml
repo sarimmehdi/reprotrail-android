@@ -32,4 +32,11 @@ jobs:
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"'
 
       - name: Verify runtime and sample
-        run: ./gradlew test ktlintCheck detekt :app:assembleDebug
+        run: >-
+          ./gradlew test ktlintCheck detekt
+          :runtime:assembleRelease
+          :runtime-compose:assembleRelease
+          :app:assembleDebug
+
+      - name: Verify runtime dependency isolation
+        run: ./scripts/verify-runtime-dependency-isolation.sh
