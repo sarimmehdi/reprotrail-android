@@ -96,6 +96,19 @@ assertEquals(15, stored?.session?.droppedActionCount)
 '''
 
 [[contractTest.suite.RoomTraceSessionRepositoryTest.cases]]
+name = "runtime queue drops are recorded in one bounded update"
+runTest = true
+given = '''
+repository.startSession(session(id = "queue-drops", createdAtEpochMs = 1), retainedSessionCount = 1)
+'''
+when = '''
+repository.recordDroppedActions("queue-drops", droppedActionCount = 7)
+'''
+then = '''
+assertEquals(7, repository.loadSession("queue-drops")?.session?.droppedActionCount)
+'''
+
+[[contractTest.suite.RoomTraceSessionRepositoryTest.cases]]
 name = "starting a session prunes the oldest retained session"
 runTest = true
 given = '''

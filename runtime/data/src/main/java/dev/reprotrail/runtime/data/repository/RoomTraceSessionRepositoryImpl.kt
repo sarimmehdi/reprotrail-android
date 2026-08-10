@@ -47,13 +47,23 @@ class RoomTraceSessionRepositoryImpl(
             val sessionDao = database.traceSessionDao()
             val actionDao = database.traceActionDao()
             if (actionDao.countActions(action.sessionId) >= maximumActionCount) {
-                sessionDao.incrementDroppedActionCount(action.sessionId)
+                sessionDao.incrementDroppedActionCountBy(action.sessionId, 1)
                 false
             } else {
                 actionDao.insertAction(action.toEntity())
                 true
             }
         }
+
+    override suspend fun recordDroppedActions(
+        sessionId: String,
+        droppedActionCount: Int,
+    ) {
+        require(droppedActionCount >= 0) { "A dropped action count cannot be negative." }
+        if (droppedActionCount > 0) {
+            database.traceSessionDao().incrementDroppedActionCountBy(sessionId, droppedActionCount)
+        }
+    }
 
     override suspend fun completeSession(
         sessionId: String,

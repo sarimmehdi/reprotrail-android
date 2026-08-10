@@ -155,14 +155,18 @@ type = "String"
 
 [[data.dao.TraceSessionDao.functions]]
 kind = "query"
-name = "incrementDroppedActionCount"
+name = "incrementDroppedActionCountBy"
 suspend = true
-sql = "UPDATE trace_sessions SET droppedActionCount = droppedActionCount + 1 WHERE id = :sessionId"
-description = "Records one action rejected by the session bound."
+sql = "UPDATE trace_sessions SET droppedActionCount = droppedActionCount + :droppedActionCount WHERE id = :sessionId"
+description = "Records actions rejected by either the runtime queue or session bound."
 
 [[data.dao.TraceSessionDao.functions.parameters]]
 name = "sessionId"
 type = "String"
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "droppedActionCount"
+type = "Int"
 
 [[data.dao.TraceActionDao.functions]]
 kind = "insert"
@@ -360,7 +364,7 @@ database.withTransaction {
     val sessionDao = database.traceSessionDao()
     val actionDao = database.traceActionDao()
     if (actionDao.countActions(action.sessionId) >= maximumActionCount) {
-        sessionDao.incrementDroppedActionCount(action.sessionId)
+        sessionDao.incrementDroppedActionCountBy(action.sessionId, 1)
         false
     } else {
         actionDao.insertAction(action.toEntity())
@@ -375,6 +379,26 @@ type = "StoredTraceAction"
 
 [[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
 name = "maximumActionCount"
+type = "Int"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "recordDroppedActions"
+suspend = true
+expression = '''
+run {
+    require(droppedActionCount >= 0) { "A dropped action count cannot be negative." }
+    if (droppedActionCount > 0) {
+        database.traceSessionDao().incrementDroppedActionCountBy(sessionId, droppedActionCount)
+    }
+}
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "droppedActionCount"
 type = "Int"
 
 [[data.repository.RoomTraceSessionRepositoryImpl.functions]]

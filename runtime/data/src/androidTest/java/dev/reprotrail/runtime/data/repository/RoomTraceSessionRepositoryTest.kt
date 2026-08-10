@@ -107,6 +107,17 @@ class RoomTraceSessionRepositoryTest {
         }
 
     @Test
+    fun `runtime queue drops are recorded in one bounded update`() =
+        runTest {
+            // Given
+            repository.startSession(session(id = "queue-drops", createdAtEpochMs = 1), retainedSessionCount = 1)
+            // When
+            repository.recordDroppedActions("queue-drops", droppedActionCount = 7)
+            // Then
+            assertEquals(7, repository.loadSession("queue-drops")?.session?.droppedActionCount)
+        }
+
+    @Test
     fun `starting a session prunes the oldest retained session`() =
         runTest {
             // Given

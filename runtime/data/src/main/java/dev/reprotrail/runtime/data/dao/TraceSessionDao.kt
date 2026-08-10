@@ -27,12 +27,15 @@ interface TraceSessionDao {
         environmentJson: String,
     )
 
-    /** Records one action rejected by the session bound. */
+    /** Records actions rejected by either the runtime queue or session bound. */
     @Query(
-        "UPDATE trace_sessions SET droppedActionCount = droppedActionCount + 1 " +
+        "UPDATE trace_sessions SET droppedActionCount = droppedActionCount + :droppedActionCount " +
             "WHERE id = :sessionId",
     )
-    suspend fun incrementDroppedActionCount(sessionId: String)
+    suspend fun incrementDroppedActionCountBy(
+        sessionId: String,
+        droppedActionCount: Int,
+    )
 
     /** Finalizes timing and marks a session exportable. */
     @Query(

@@ -31,6 +31,12 @@ interface TraceSessionRepository {
         maximumActionCount: Int,
     ): Boolean
 
+    /** Records actions rejected before persistence by the bounded runtime queue. */
+    suspend fun recordDroppedActions(
+        sessionId: String,
+        droppedActionCount: Int,
+    )
+
     /** Finalizes session timing and makes the session eligible for export. */
     suspend fun completeSession(
         sessionId: String,
