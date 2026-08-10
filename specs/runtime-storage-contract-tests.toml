@@ -1,0 +1,128 @@
+[contractTest.suite.RoomTraceSessionRepositoryTest]
+layer = "data"
+sourceSet = "androidTest"
+packageSuffix = "repository"
+annotations = ["@RunWith(AndroidJUnit4::class)"]
+imports = [
+    "androidx.room.Room",
+    "androidx.test.core.app.ApplicationProvider",
+    "androidx.test.ext.junit.runners.AndroidJUnit4",
+    "dev.reprotrail.runtime.data.database.ReproTrailDatabase",
+    "dev.reprotrail.runtime.domain.model.StoredTraceAction",
+    "dev.reprotrail.runtime.domain.model.StoredTraceSession",
+    "dev.reprotrail.runtime.domain.model.StoredTraceSessionState",
+    "kotlinx.coroutines.async",
+    "kotlinx.coroutines.awaitAll",
+    "org.junit.Assert.assertEquals",
+    "org.junit.Assert.assertNotNull",
+    "org.junit.Assert.assertNull",
+    "org.junit.runner.RunWith",
+]
+properties = [
+    "private lateinit var database: ReproTrailDatabase",
+    "private lateinit var repository: RoomTraceSessionRepositoryImpl",
+    '''
+private fun session(
+    id: String,
+    createdAtEpochMs: Long,
+): StoredTraceSession =
+    StoredTraceSession(
+        id = id,
+        startedAt = "2026-08-10T10:00:00Z",
+        packageName = "dev.reprotrail.sample",
+        policyVersion = "test-policy",
+        environmentJson = "{}",
+        state = StoredTraceSessionState.ACTIVE,
+        droppedActionCount = 0,
+        createdAtEpochMs = createdAtEpochMs,
+        endedAt = null,
+        durationMs = null,
+    )
+
+private fun action(
+    sessionId: String,
+    sequence: Int,
+): StoredTraceAction =
+    StoredTraceAction(
+        id = "action-$sequence",
+        sessionId = sessionId,
+        sequence = sequence,
+        offsetMs = sequence.toLong(),
+        payloadJson = "{\"type\":\"tap\"}",
+    )
+''',
+]
+beforeEach = '''
+database = Room.inMemoryDatabaseBuilder(
+    ApplicationProvider.getApplicationContext(),
+    ReproTrailDatabase::class.java,
+).build()
+repository = RoomTraceSessionRepositoryImpl(database)
+'''
+afterEach = "database.close()"
+
+[[contractTest.suite.RoomTraceSessionRepositoryTest.cases]]
+name = "actions are stored in sequence order"
+runTest = true
+given = '''
+val session = session(id = "ordered", createdAtEpochMs = 1)
+repository.startSession(session, retainedSessionCount = 3)
+'''
+when = '''
+repository.appendAction(action(session.id, sequence = 1), maximumActionCount = 3)
+repository.appendAction(action(session.id, sequence = 0), maximumActionCount = 3)
+'''
+then = '''
+assertEquals(listOf(0, 1), repository.loadSession(session.id)?.actions?.map { it.sequence })
+'''
+
+[[contractTest.suite.RoomTraceSessionRepositoryTest.cases]]
+name = "concurrent appends never exceed the action limit"
+runTest = true
+given = '''
+val session = session(id = "bounded", createdAtEpochMs = 1)
+repository.startSession(session, retainedSessionCount = 3)
+'''
+when = '''
+val accepted = (0 until 20).map { sequence ->
+    async { repository.appendAction(action(session.id, sequence), maximumActionCount = 5) }
+}.awaitAll()
+val stored = repository.loadSession(session.id)
+'''
+then = '''
+assertEquals(5, accepted.count { it })
+assertEquals(5, stored?.actions?.size)
+assertEquals(15, stored?.session?.droppedActionCount)
+'''
+
+[[contractTest.suite.RoomTraceSessionRepositoryTest.cases]]
+name = "starting a session prunes the oldest retained session"
+runTest = true
+given = '''
+repository.startSession(session(id = "oldest", createdAtEpochMs = 1), retainedSessionCount = 2)
+repository.startSession(session(id = "middle", createdAtEpochMs = 2), retainedSessionCount = 2)
+'''
+when = '''
+repository.startSession(session(id = "newest", createdAtEpochMs = 3), retainedSessionCount = 2)
+'''
+then = '''
+assertNull(repository.loadSession("oldest"))
+assertNotNull(repository.loadSession("middle"))
+assertNotNull(repository.loadSession("newest"))
+'''
+
+[[contractTest.suite.RoomTraceSessionRepositoryTest.cases]]
+name = "only completed sessions are available for export"
+runTest = true
+given = '''
+val completed = session(id = "completed", createdAtEpochMs = 1)
+val active = session(id = "active", createdAtEpochMs = 2)
+repository.startSession(completed, retainedSessionCount = 3)
+repository.completeSession(completed.id, endedAt = "2026-08-10T10:00:01Z", durationMs = 1000)
+repository.startSession(active, retainedSessionCount = 3)
+'''
+when = "val latest = repository.loadLatestCompletedSession()"
+then = '''
+assertEquals("completed", latest?.session?.id)
+assertEquals(StoredTraceSessionState.COMPLETED, latest?.session?.state)
+'''

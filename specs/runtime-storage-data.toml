@@ -1,0 +1,517 @@
+[data.capabilities]
+room = true
+datastore = false
+
+[data.entity.TraceSessionEntity]
+kind = "room_entity"
+description = "Room representation of recoverable trace-session metadata."
+tableName = "trace_sessions"
+primaryKey = "id"
+primaryKeyAutoGenerate = false
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "id"
+type = "String"
+description = "Stable trace-session UUID."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "startedAt"
+type = "String"
+description = "RFC 3339 capture start time."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "packageName"
+type = "String"
+description = "Package that produced the trace."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "policyVersion"
+type = "String"
+description = "Privacy policy applied before storage."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "environmentJson"
+type = "String?"
+defaultValue = "null"
+description = "Serialized replay environment, when capture has resolved it."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "state"
+type = "String"
+description = "Persisted name of the recording lifecycle state."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "droppedActionCount"
+type = "Int"
+description = "Eligible actions rejected after reaching the configured bound."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "createdAtEpochMs"
+type = "Long"
+description = "Deterministic local retention ordering key."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "endedAt"
+type = "String?"
+defaultValue = "null"
+description = "RFC 3339 completion time."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "durationMs"
+type = "Long?"
+defaultValue = "null"
+description = "Monotonic duration of a completed session."
+
+[data.entity.TraceActionEntity]
+kind = "room_entity"
+description = "Room representation of one canonical privacy-reviewed action."
+tableName = "trace_actions"
+primaryKey = "id"
+primaryKeyAutoGenerate = false
+
+[[data.entity.TraceActionEntity.properties]]
+name = "id"
+type = "String"
+description = "Stable action UUID."
+
+[[data.entity.TraceActionEntity.properties]]
+name = "sessionId"
+type = "String"
+description = "Owning trace-session UUID."
+
+[[data.entity.TraceActionEntity.properties]]
+name = "sequence"
+type = "Int"
+description = "Canonical zero-based action order."
+
+[[data.entity.TraceActionEntity.properties]]
+name = "offsetMs"
+type = "Long"
+description = "Monotonic offset from session start."
+
+[[data.entity.TraceActionEntity.properties]]
+name = "payloadJson"
+type = "String"
+description = "Canonical serialized action payload."
+
+[data.dao.TraceSessionDao]
+description = "Performs atomic trace-session and action persistence operations."
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "insert"
+name = "insertSession"
+suspend = true
+onConflict = "ABORT"
+description = "Inserts a newly started trace session."
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "session"
+type = "TraceSessionEntity"
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "updateSessionState"
+suspend = true
+sql = "UPDATE trace_sessions SET state = :state WHERE id = :sessionId"
+description = "Persists a recording lifecycle transition."
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "state"
+type = "String"
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "updateEnvironment"
+suspend = true
+sql = "UPDATE trace_sessions SET environmentJson = :environmentJson WHERE id = :sessionId"
+description = "Stores the resolved replay environment."
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "environmentJson"
+type = "String"
+
+[data.dao.TraceActionDao]
+description = "Reads and writes bounded canonical actions for trace sessions."
+
+[[data.dao.TraceActionDao.functions]]
+kind = "query"
+name = "countActions"
+suspend = true
+sql = "SELECT COUNT(*) FROM trace_actions WHERE sessionId = :sessionId"
+returnType = "Int"
+description = "Counts actions currently retained for one session."
+
+[[data.dao.TraceActionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "incrementDroppedActionCount"
+suspend = true
+sql = "UPDATE trace_sessions SET droppedActionCount = droppedActionCount + 1 WHERE id = :sessionId"
+description = "Records one action rejected by the session bound."
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceActionDao.functions]]
+kind = "insert"
+name = "insertAction"
+suspend = true
+onConflict = "ABORT"
+description = "Inserts one accepted canonical action."
+
+[[data.dao.TraceActionDao.functions.parameters]]
+name = "action"
+type = "TraceActionEntity"
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "completeSession"
+suspend = true
+sql = "UPDATE trace_sessions SET state = 'COMPLETED', endedAt = :endedAt, durationMs = :durationMs WHERE id = :sessionId"
+description = "Finalizes timing and marks a session exportable."
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "endedAt"
+type = "String"
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "durationMs"
+type = "Long"
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "findSession"
+suspend = true
+sql = "SELECT * FROM trace_sessions WHERE id = :sessionId LIMIT 1"
+returnType = "TraceSessionEntity?"
+description = "Loads one trace session by UUID."
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceActionDao.functions]]
+kind = "query"
+name = "findActions"
+suspend = true
+sql = "SELECT * FROM trace_actions WHERE sessionId = :sessionId ORDER BY sequence ASC"
+returnType = "List<TraceActionEntity>"
+description = "Loads one session's actions in canonical order."
+
+[[data.dao.TraceActionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "findSessionIdsBeyondLimit"
+suspend = true
+sql = "SELECT id FROM trace_sessions ORDER BY createdAtEpochMs DESC, id DESC LIMIT -1 OFFSET :retainedSessionCount"
+returnType = "List<String>"
+description = "Finds oldest session UUIDs beyond the retention bound."
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "retainedSessionCount"
+type = "Int"
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "findLatestCompletedSession"
+suspend = true
+sql = "SELECT * FROM trace_sessions WHERE state = 'COMPLETED' ORDER BY createdAtEpochMs DESC, id DESC LIMIT 1"
+returnType = "TraceSessionEntity?"
+description = "Loads the newest completed session metadata."
+
+[[data.dao.TraceActionDao.functions]]
+kind = "query"
+name = "deleteActionsForSession"
+suspend = true
+sql = "DELETE FROM trace_actions WHERE sessionId = :sessionId"
+description = "Deletes actions owned by one trace session."
+
+[[data.dao.TraceActionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "deleteSessionById"
+suspend = true
+sql = "DELETE FROM trace_sessions WHERE id = :sessionId"
+description = "Deletes one trace-session row."
+
+[[data.dao.TraceSessionDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceActionDao.functions]]
+kind = "query"
+name = "deleteAllActions"
+suspend = true
+sql = "DELETE FROM trace_actions"
+description = "Deletes all retained action rows."
+
+[[data.dao.TraceSessionDao.functions]]
+kind = "query"
+name = "deleteAllSessions"
+suspend = true
+sql = "DELETE FROM trace_sessions"
+description = "Deletes all retained session rows."
+
+[data.database.ReproTrailDatabase]
+description = "Room database containing bounded local ReproTrail sessions and actions."
+entities = ["TraceSessionEntity", "TraceActionEntity"]
+daos = ["TraceSessionDao", "TraceActionDao"]
+version = 1
+databaseName = "reprotrail.db"
+
+[data.repository.RoomTraceSessionRepositoryImpl]
+description = "Implements bounded trace-session persistence with atomic Room transactions."
+implements = "TraceSessionRepository"
+implementsImport = "dev.reprotrail.runtime.domain.repository.TraceSessionRepository"
+imports = [
+    "androidx.room.withTransaction",
+    "dev.reprotrail.runtime.data.entity.TraceActionEntity",
+    "dev.reprotrail.runtime.data.entity.TraceSessionEntity",
+    "dev.reprotrail.runtime.domain.model.StoredTrace",
+    "dev.reprotrail.runtime.domain.model.StoredTraceAction",
+    "dev.reprotrail.runtime.domain.model.StoredTraceSession",
+    "dev.reprotrail.runtime.domain.model.StoredTraceSessionState",
+]
+
+[[data.repository.RoomTraceSessionRepositoryImpl.constructorParameters]]
+name = "database"
+type = "ReproTrailDatabase"
+import = "dev.reprotrail.runtime.data.database.ReproTrailDatabase"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "startSession"
+suspend = true
+expression = '''
+database.withTransaction {
+    require(retainedSessionCount > 0) { "At least one trace session must be retained." }
+    val sessionDao = database.traceSessionDao()
+    val actionDao = database.traceActionDao()
+    sessionDao.insertSession(session.toEntity())
+    sessionDao.findSessionIdsBeyondLimit(retainedSessionCount).forEach { expiredSessionId ->
+        actionDao.deleteActionsForSession(expiredSessionId)
+        sessionDao.deleteSessionById(expiredSessionId)
+    }
+}
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "session"
+type = "StoredTraceSession"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "retainedSessionCount"
+type = "Int"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "updateSessionState"
+suspend = true
+expression = "database.traceSessionDao().updateSessionState(sessionId, state.name)"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "state"
+type = "StoredTraceSessionState"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "updateEnvironment"
+suspend = true
+expression = "database.traceSessionDao().updateEnvironment(sessionId, environmentJson)"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "environmentJson"
+type = "String"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "appendAction"
+suspend = true
+returnType = "Boolean"
+expression = '''
+database.withTransaction {
+    require(maximumActionCount > 0) { "A trace session must accept at least one action." }
+    val sessionDao = database.traceSessionDao()
+    val actionDao = database.traceActionDao()
+    if (actionDao.countActions(action.sessionId) >= maximumActionCount) {
+        sessionDao.incrementDroppedActionCount(action.sessionId)
+        false
+    } else {
+        actionDao.insertAction(action.toEntity())
+        true
+    }
+}
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "action"
+type = "StoredTraceAction"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "maximumActionCount"
+type = "Int"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "completeSession"
+suspend = true
+expression = "database.traceSessionDao().completeSession(sessionId, endedAt, durationMs)"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "endedAt"
+type = "String"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "durationMs"
+type = "Long"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "loadSession"
+suspend = true
+returnType = "StoredTrace?"
+expression = '''
+database.withTransaction {
+    val session = database.traceSessionDao().findSession(sessionId) ?: return@withTransaction null
+    StoredTrace(
+        session = session.toDomain(),
+        actions = database.traceActionDao().findActions(sessionId).map(TraceActionEntity::toDomain),
+    )
+}
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "loadLatestCompletedSession"
+suspend = true
+returnType = "StoredTrace?"
+expression = '''
+database.withTransaction {
+    val session = database.traceSessionDao().findLatestCompletedSession() ?: return@withTransaction null
+    StoredTrace(
+        session = session.toDomain(),
+        actions = database.traceActionDao().findActions(session.id).map(TraceActionEntity::toDomain),
+    )
+}
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "deleteSession"
+suspend = true
+expression = '''
+database.withTransaction {
+    database.traceActionDao().deleteActionsForSession(sessionId)
+    database.traceSessionDao().deleteSessionById(sessionId)
+}
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.repository.RoomTraceSessionRepositoryImpl.functions]]
+name = "deleteAllSessions"
+suspend = true
+expression = '''
+database.withTransaction {
+    database.traceActionDao().deleteAllActions()
+    database.traceSessionDao().deleteAllSessions()
+}
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.extensionFunctions]]
+receiverType = "StoredTraceSession"
+name = "toEntity"
+returnType = "TraceSessionEntity"
+expression = '''
+TraceSessionEntity(
+    id = id,
+    startedAt = startedAt,
+    packageName = packageName,
+    policyVersion = policyVersion,
+    environmentJson = environmentJson,
+    state = state.name,
+    droppedActionCount = droppedActionCount,
+    createdAtEpochMs = createdAtEpochMs,
+    endedAt = endedAt,
+    durationMs = durationMs,
+)
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.extensionFunctions]]
+receiverType = "TraceSessionEntity"
+name = "toDomain"
+returnType = "StoredTraceSession"
+expression = '''
+StoredTraceSession(
+    id = id,
+    startedAt = startedAt,
+    packageName = packageName,
+    policyVersion = policyVersion,
+    environmentJson = environmentJson,
+    state = StoredTraceSessionState.valueOf(state),
+    droppedActionCount = droppedActionCount,
+    createdAtEpochMs = createdAtEpochMs,
+    endedAt = endedAt,
+    durationMs = durationMs,
+)
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.extensionFunctions]]
+receiverType = "StoredTraceAction"
+name = "toEntity"
+returnType = "TraceActionEntity"
+expression = '''
+TraceActionEntity(
+    id = id,
+    sessionId = sessionId,
+    sequence = sequence,
+    offsetMs = offsetMs,
+    payloadJson = payloadJson,
+)
+'''
+
+[[data.repository.RoomTraceSessionRepositoryImpl.extensionFunctions]]
+receiverType = "TraceActionEntity"
+name = "toDomain"
+returnType = "StoredTraceAction"
+expression = '''
+StoredTraceAction(
+    id = id,
+    sessionId = sessionId,
+    sequence = sequence,
+    offsetMs = offsetMs,
+    payloadJson = payloadJson,
+)
+'''
