@@ -23,5 +23,6 @@ dependencies {
     implementation(libs.koinCoreLibrary)
     testImplementation(libs.kotlinxCoroutinesTestLibrary)
     testImplementation(libs.koinTestLibrary)
+    testImplementation(libs.hiltAndroidLibrary)
     testImplementation(libs.roboelectricLibrary)
 }
