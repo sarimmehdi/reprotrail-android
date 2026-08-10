@@ -26,7 +26,7 @@ class MainActivityTest {
 
         activity.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, x, y, 1_000))
         activity.dispatchTouchEvent(event(MotionEvent.ACTION_UP, x, y, 1_100))
-        shadowOf(Looper.getMainLooper()).idle()
+        waitForExport(activity)
 
         val status = activity.findViewById<TextView>(R.id.capture_status).text.toString()
         assertTrue(status.contains("Captured tap 1"))
@@ -43,6 +43,15 @@ class MainActivityTest {
     private fun layout(root: View) {
         root.measure(exactly(1_080), exactly(1_920))
         root.layout(0, 0, 1_080, 1_920)
+    }
+
+    private fun waitForExport(activity: MainActivity) {
+        repeat(100) {
+            shadowOf(Looper.getMainLooper()).idle()
+            val status = activity.findViewById<TextView>(R.id.capture_status).text.toString()
+            if (status.contains("latest-trace.json")) return
+            Thread.sleep(10)
+        }
     }
 
     private fun exactly(size: Int): Int = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY)

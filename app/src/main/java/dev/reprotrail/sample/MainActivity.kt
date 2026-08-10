@@ -5,8 +5,10 @@ import android.view.MotionEvent
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
 import dev.reprotrail.runtime.ReproTrail
 import dev.reprotrail.runtime.ReproTrailConfig
+import kotlinx.coroutines.launch
 
 /** Hosts the controlled Android View capture fixture. */
 class MainActivity : ComponentActivity() {
@@ -19,11 +21,15 @@ class MainActivity : ComponentActivity() {
         reproTrail = ReproTrail.create(this, ReproTrailConfig(policyVersion = SAMPLE_POLICY_VERSION))
         val target = findViewById<Button>(R.id.capture_target)
         ReproTrail.setReplayId(target, SAMPLE_REPLAY_ID)
+        lifecycleScope.launch { reproTrail.startRecording() }
         target.setOnClickListener {
-            capturedTapCount += 1
-            val trace = reproTrail.exportLatestTrace()
-            findViewById<TextView>(R.id.capture_status).text =
-                getString(R.string.capture_complete, capturedTapCount, trace.absolutePath)
+            lifecycleScope.launch {
+                reproTrail.stopRecording()
+                val trace = reproTrail.exportLatestTrace()
+                capturedTapCount += 1
+                findViewById<TextView>(R.id.capture_status).text =
+                    getString(R.string.capture_complete, capturedTapCount, trace.absolutePath)
+            }
         }
     }
 

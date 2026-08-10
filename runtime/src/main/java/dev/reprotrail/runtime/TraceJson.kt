@@ -15,6 +15,14 @@ internal object TraceJson {
         }
 
     fun encode(document: TraceDocument): String = json.encodeToString(document)
+
+    fun encodeAction(action: TraceAction): String = json.encodeToString(action)
+
+    fun decodeAction(value: String): TraceAction = json.decodeFromString(value)
+
+    fun encodeEnvironment(environment: TraceEnvironment): String = json.encodeToString(environment)
+
+    fun decodeEnvironment(value: String): TraceEnvironment = json.decodeFromString(value)
 }
 
 @Serializable
@@ -24,13 +32,15 @@ internal data class TraceDocument(
     val application: TraceApplication,
     val environment: TraceEnvironment,
     val privacy: TracePrivacy,
-    val actions: List<TapAction>,
+    val actions: List<TraceAction>,
 )
 
 @Serializable
 internal data class TraceSession(
     val id: String,
     val startedAt: String,
+    val endedAt: String? = null,
+    val durationMs: Long? = null,
     val recorder: TraceRecorderIdentity = TraceRecorderIdentity(),
 )
 
@@ -79,13 +89,20 @@ internal data class TraceConsent(
 )
 
 @Serializable
+internal sealed interface TraceAction {
+    val id: String
+    val sequence: Int
+    val offsetMs: Long
+}
+
+@Serializable
+@SerialName("tap")
 internal data class TapAction(
-    val id: String,
-    val sequence: Int,
-    val offsetMs: Long,
-    val type: String = "tap",
+    override val id: String,
+    override val sequence: Int,
+    override val offsetMs: Long,
     val target: TraceTarget,
-)
+) : TraceAction
 
 @Serializable
 internal data class TraceTarget(
