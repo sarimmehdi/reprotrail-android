@@ -13,8 +13,12 @@ internal object ViewTargetResolver {
         x: Float,
         y: Float,
         visibleSelectorAllowlist: Set<String> = emptySet(),
+        targetResolvers: List<ReproTrailTargetResolver> = emptyList(),
     ): TraceTarget {
         require(root.width > 0 && root.height > 0) { "The activity content must be laid out before capture." }
+        targetResolvers.firstNotNullOfOrNull { it.resolve(root, x, y) }?.let { taggedTarget ->
+            return taggedTarget.toTraceTarget(root, x, y)
+        }
         val hit = deepestActionableView(root, x, y, originX = 0, originY = 0) ?: LocatedView(root, 0, 0)
         val coordinate = CoordinateSelector(x = normalize(x, root.width), y = normalize(y, root.height))
         val selectors = buildSelectors(hit.view, coordinate, visibleSelectorAllowlist)
@@ -113,4 +117,34 @@ internal object ViewTargetResolver {
         val originX: Int,
         val originY: Int,
     )
+
+    private fun ReproTrailTaggedTarget.toTraceTarget(
+        root: View,
+        x: Float,
+        y: Float,
+    ): TraceTarget {
+        require(testTag.isNotBlank() && testTag.length <= MAX_TEST_TAG_LENGTH) {
+            "A resolved test tag must contain between 1 and 255 non-blank characters."
+        }
+        require(bounds.right > bounds.left && bounds.bottom > bounds.top) {
+            "Resolved target bounds must have positive width and height."
+        }
+        return TraceTarget(
+            component = component,
+            bounds =
+                NormalizedBounds(
+                    left = normalize(bounds.left, root.width),
+                    top = normalize(bounds.top, root.height),
+                    right = normalize(bounds.right, root.width),
+                    bottom = normalize(bounds.bottom, root.height),
+                ),
+            selectors =
+                listOf(
+                    TestTagSelector(testTag),
+                    CoordinateSelector(x = normalize(x, root.width), y = normalize(y, root.height)),
+                ),
+        )
+    }
+
+    private const val MAX_TEST_TAG_LENGTH = 255
 }

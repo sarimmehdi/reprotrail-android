@@ -164,6 +164,13 @@ internal data class ResourceIdSelector(
 ) : TraceSelector
 
 @Serializable
+@SerialName("testTag")
+internal data class TestTagSelector(
+    val value: String,
+    val source: String = "captured",
+) : TraceSelector
+
+@Serializable
 @SerialName("text")
 internal data class TextSelector(
     val value: String,

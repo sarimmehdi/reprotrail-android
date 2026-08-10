@@ -90,6 +90,27 @@ class ViewTargetResolverTest {
         assertEquals("Submit payment", (allowed.selectors[2] as ContentDescriptionSelector).value)
     }
 
+    @Test
+    fun `explicit target resolver can contribute a ranked test tag`() {
+        val root = rootView()
+        layout(root)
+        val resolver =
+            ReproTrailTargetResolver { _, _, _ ->
+                ReproTrailTaggedTarget(
+                    testTag = "checkout.compose-submit",
+                    component = "compose.Button",
+                    bounds = ReproTrailPixelBounds(left = 40f, top = 80f, right = 360f, bottom = 160f),
+                )
+            }
+
+        val target = ViewTargetResolver.resolve(root, 200f, 120f, targetResolvers = listOf(resolver))
+
+        assertEquals("compose.Button", target.component)
+        assertEquals(listOf("testTag", "coordinate"), target.selectors.map(::selectorType))
+        assertEquals("checkout.compose-submit", (target.selectors.first() as TestTagSelector).value)
+        assertEquals(NormalizedBounds(0.1, 0.1, 0.9, 0.2), target.bounds)
+    }
+
     private fun rootView(): FrameLayout = FrameLayout(application())
 
     private fun layout(root: FrameLayout) {
@@ -116,6 +137,7 @@ class ViewTargetResolverTest {
         when (selector) {
             is ReplayIdSelector -> "replayId"
             is ResourceIdSelector -> "resourceId"
+            is TestTagSelector -> "testTag"
             is TextSelector -> "text"
             is ContentDescriptionSelector -> "contentDescription"
             is CoordinateSelector -> "coordinate"

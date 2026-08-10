@@ -20,11 +20,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  * @property policyVersion host-defined version of the capture policy applied to every exported trace.
  * @property storage bounded local persistence configuration.
  * @property privacy host-controlled privacy safety switches.
+ * @property targetResolvers optional UI-toolkit bridges such as the Compose adapter.
  */
 public data class ReproTrailConfig(
     val policyVersion: String,
     val storage: ReproTrailStorageConfig = ReproTrailStorageConfig(),
     val privacy: ReproTrailPrivacyConfig = ReproTrailPrivacyConfig(),
+    val targetResolvers: List<ReproTrailTargetResolver> = emptyList(),
 )
 
 /** Configures privacy controls that are evaluated before an action can be persisted. */

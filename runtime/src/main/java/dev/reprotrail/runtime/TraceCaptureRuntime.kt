@@ -120,6 +120,7 @@ internal class TraceCaptureRuntime(
                                     root,
                                     event.eventTime,
                                     configuration.privacy.visibleSelectorAllowlist,
+                                    configuration.targetResolvers,
                                 ),
                             environmentJson = TraceJson.encodeEnvironment(EnvironmentCapture.from(context, root)),
                         )
@@ -221,6 +222,7 @@ private fun DetectedGesture.toTraceAction(
     root: View,
     eventTimeMs: Long,
     visibleSelectorAllowlist: Set<String>,
+    targetResolvers: List<ReproTrailTargetResolver>,
 ): TraceAction {
     val id = newId()
     val sequence = session.nextSequence++
@@ -231,7 +233,7 @@ private fun DetectedGesture.toTraceAction(
                 id,
                 sequence,
                 offsetMs,
-                ViewTargetResolver.resolve(root, x, y, visibleSelectorAllowlist),
+                ViewTargetResolver.resolve(root, x, y, visibleSelectorAllowlist, targetResolvers),
             )
         is DetectedLongPress ->
             LongPressAction(
@@ -239,7 +241,7 @@ private fun DetectedGesture.toTraceAction(
                 sequence,
                 offsetMs,
                 durationMs,
-                ViewTargetResolver.resolve(root, x, y, visibleSelectorAllowlist),
+                ViewTargetResolver.resolve(root, x, y, visibleSelectorAllowlist, targetResolvers),
             )
         is DetectedSwipe ->
             SwipeAction(
