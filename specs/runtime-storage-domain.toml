@@ -1,0 +1,213 @@
+[domain.model.StoredTraceSessionState]
+kind = "enum_class"
+description = "Durable lifecycle state of a locally captured trace session."
+values = ["ACTIVE", "PAUSED", "COMPLETED"]
+
+[domain.model.StoredTraceSession]
+kind = "data_class"
+description = "Metadata required to recover and export one locally captured trace session."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "id"
+type = "String"
+description = "Stable UUID assigned when recording starts."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "startedAt"
+type = "String"
+description = "RFC 3339 wall-clock time at which capture began."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "packageName"
+type = "String"
+description = "Android application package that produced the session."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "policyVersion"
+type = "String"
+description = "Host privacy-policy version applied before persistence."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "environmentJson"
+type = "String?"
+defaultValue = "null"
+description = "Serialized replay environment captured after the first eligible action."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "state"
+type = "StoredTraceSessionState"
+description = "Current recording lifecycle state."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "droppedActionCount"
+type = "Int"
+description = "Number of eligible actions rejected by the configured session bound."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "createdAtEpochMs"
+type = "Long"
+description = "Local ordering key used only for deterministic retention."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "endedAt"
+type = "String?"
+defaultValue = "null"
+description = "RFC 3339 wall-clock time at which capture completed."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "durationMs"
+type = "Long?"
+defaultValue = "null"
+description = "Monotonic elapsed duration of a completed session."
+
+[domain.model.StoredTraceAction]
+kind = "data_class"
+description = "Privacy-reviewed canonical action payload stored for one trace session."
+
+[[domain.model.StoredTraceAction.properties]]
+name = "id"
+type = "String"
+description = "Action UUID preserved in the exported wire contract."
+
+[[domain.model.StoredTraceAction.properties]]
+name = "sessionId"
+type = "String"
+description = "Owning trace-session UUID."
+
+[[domain.model.StoredTraceAction.properties]]
+name = "sequence"
+type = "Int"
+description = "Zero-based action order within the owning session."
+
+[[domain.model.StoredTraceAction.properties]]
+name = "offsetMs"
+type = "Long"
+description = "Monotonic offset from session start."
+
+[[domain.model.StoredTraceAction.properties]]
+name = "payloadJson"
+type = "String"
+description = "Canonical JSON representation of the privacy-approved action."
+
+[domain.model.StoredTrace]
+kind = "data_class"
+description = "Recovered session metadata and its ordered durable action sequence."
+
+[[domain.model.StoredTrace.properties]]
+name = "session"
+type = "StoredTraceSession"
+description = "Recovered metadata for the trace session."
+
+[[domain.model.StoredTrace.properties]]
+name = "actions"
+type = "List<StoredTraceAction>"
+description = "Actions ordered by their canonical sequence."
+
+[domain.repository.TraceSessionRepository]
+description = "Defines bounded durable trace-session operations available to the runtime facade."
+imports = [
+    "dev.reprotrail.runtime.domain.model.StoredTrace",
+    "dev.reprotrail.runtime.domain.model.StoredTraceAction",
+    "dev.reprotrail.runtime.domain.model.StoredTraceSession",
+    "dev.reprotrail.runtime.domain.model.StoredTraceSessionState",
+]
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "startSession"
+suspend = true
+description = "Persists a new session and prunes sessions beyond the retention bound."
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "session"
+type = "StoredTraceSession"
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "retainedSessionCount"
+type = "Int"
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "updateSessionState"
+suspend = true
+description = "Persists an active or paused lifecycle transition."
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "state"
+type = "StoredTraceSessionState"
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "updateEnvironment"
+suspend = true
+description = "Persists the privacy-safe replay environment for a session."
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "environmentJson"
+type = "String"
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "appendAction"
+suspend = true
+returnType = "Boolean"
+description = "Atomically accepts an action when capacity remains or records one dropped action."
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "action"
+type = "StoredTraceAction"
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "maximumActionCount"
+type = "Int"
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "completeSession"
+suspend = true
+description = "Finalizes session timing and makes the session eligible for export."
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "endedAt"
+type = "String"
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "durationMs"
+type = "Long"
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "loadSession"
+suspend = true
+returnType = "StoredTrace?"
+description = "Loads one session and its actions in canonical order."
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "loadLatestCompletedSession"
+suspend = true
+returnType = "StoredTrace?"
+description = "Loads the newest completed session eligible for export."
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "deleteSession"
+suspend = true
+description = "Deletes one session and every action owned by it."
+
+[[domain.repository.TraceSessionRepository.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[domain.repository.TraceSessionRepository.functions]]
+name = "deleteAllSessions"
+suspend = true
+description = "Deletes every locally retained trace and action."
