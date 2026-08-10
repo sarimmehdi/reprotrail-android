@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
-        const val SAMPLE_POLICY_VERSION = "milestone-2-internal"
+        const val SAMPLE_POLICY_VERSION = "milestone-3-internal"
         const val SAMPLE_REPLAY_ID = "sample.capture-target"
     }
 }
