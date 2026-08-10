@@ -11,6 +11,11 @@ class ModuleTypeTest {
     }
 
     @Test
+    fun `utils module never depends on itself`() {
+        assertFalse(ModuleType.UTILS.dependsOnAppUtils)
+    }
+
+    @Test
     fun `existing app module types retain their utils dependency`() {
         assertTrue(ModuleType.DOMAIN.dependsOnAppUtils)
         assertTrue(ModuleType.DATA.dependsOnAppUtils)

@@ -12,4 +12,4 @@ enum class ModuleType {
 }
 
 internal val ModuleType.dependsOnAppUtils: Boolean
-    get() = this != ModuleType.SDK
+    get() = this != ModuleType.SDK && this != ModuleType.UTILS
