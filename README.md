@@ -217,7 +217,7 @@ After pulling an export, validate and generate or run a Maestro flow:
 
 ```shell
 reprotrail-cli validate latest-trace.json
-reprotrail-cli generate latest-trace.json --output replay.yaml
+reprotrail-cli generate-maestro latest-trace.json --output replay.yaml
 reprotrail-cli replay latest-trace.json --repeat 3
 ```
 
