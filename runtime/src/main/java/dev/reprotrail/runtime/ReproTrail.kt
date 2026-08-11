@@ -5,13 +5,22 @@ import android.content.Context
 import android.view.MotionEvent
 import android.view.View
 import androidx.room.Room
+import androidx.work.WorkManager
 import dev.reprotrail.runtime.data.database.ReproTrailDatabase
 import dev.reprotrail.runtime.data.repository.RoomTraceSessionRepositoryImpl
+import dev.reprotrail.runtime.data.repository.RoomTraceUploadStateRepositoryImpl
+import dev.reprotrail.runtime.domain.model.StoredTraceUploadState
 import dev.reprotrail.runtime.domain.repository.TraceSessionRepository
+import dev.reprotrail.runtime.domain.repository.TraceUploadStateRepository
+import dev.reprotrail.runtime.upload.data.http.HttpTraceUploader
+import dev.reprotrail.runtime.upload.domain.TraceUploader
+import dev.reprotrail.runtime.upload.domain.credential.IngestCredentialProvider
 import org.koin.core.KoinApplication
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import java.io.File
+import java.net.URI
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -21,12 +30,99 @@ import java.util.concurrent.atomic.AtomicBoolean
  * @property storage bounded local persistence configuration.
  * @property privacy host-controlled privacy safety switches.
  * @property targetResolvers optional UI-toolkit bridges such as the Compose adapter.
+ * @property upload optional explicit hosted-ingestion configuration.
  */
 public data class ReproTrailConfig(
     val policyVersion: String,
     val storage: ReproTrailStorageConfig = ReproTrailStorageConfig(),
     val privacy: ReproTrailPrivacyConfig = ReproTrailPrivacyConfig(),
     val targetResolvers: List<ReproTrailTargetResolver> = emptyList(),
+    val upload: ReproTrailUploadConfig? = null,
+)
+
+/** Supplies a current ingest credential without coupling the host to ReproTrail's internal DI graph. */
+public fun interface ReproTrailIngestCredentialProvider {
+    /** Returns the current raw project-scoped ingest credential only when an attempt begins. */
+    public suspend fun getCredential(): String
+}
+
+/** Configures explicit hosted upload of completed privacy-reviewed traces. */
+public data class ReproTrailUploadConfig(
+    /** Absolute backend base URL. HTTPS is required unless local development opts out explicitly. */
+    val baseUrl: String,
+    /** Backend project UUID that scopes credentials and immutable trace storage. */
+    val projectId: String,
+    /** Host-owned just-in-time credential bridge. Its result is never persisted by ReproTrail. */
+    val credentialProvider: ReproTrailIngestCredentialProvider,
+    /** Maximum number of worker attempts, including the first request. */
+    val maximumAttempts: Int = DEFAULT_MAXIMUM_UPLOAD_ATTEMPTS,
+    /** Explicit local-development escape hatch for cleartext HTTP. Never enable in production. */
+    val allowInsecureHttp: Boolean = false,
+) {
+    init {
+        val uri = runCatching { URI(baseUrl) }.getOrNull()
+        require(uri?.isAbsolute == true && !uri.host.isNullOrBlank()) { "An absolute upload base URL is required." }
+        require(uri.scheme == HTTPS_SCHEME || (allowInsecureHttp && uri.scheme == HTTP_SCHEME)) {
+            "Hosted upload requires HTTPS unless insecure HTTP is explicitly allowed."
+        }
+        require(uri.userInfo == null && uri.query == null && uri.fragment == null) {
+            "The upload base URL must not contain credentials, a query, or a fragment."
+        }
+        require(runCatching { UUID.fromString(projectId) }.isSuccess) { "The upload project ID must be a UUID." }
+        require(maximumAttempts in 1..MAXIMUM_UPLOAD_ATTEMPTS) {
+            "Maximum upload attempts must be between 1 and $MAXIMUM_UPLOAD_ATTEMPTS."
+        }
+    }
+
+    internal val normalizedBaseUrl: String
+        get() = if (baseUrl.endsWith('/')) baseUrl else "$baseUrl/"
+
+    private companion object {
+        const val DEFAULT_MAXIMUM_UPLOAD_ATTEMPTS = 5
+        const val MAXIMUM_UPLOAD_ATTEMPTS = 10
+        const val HTTP_SCHEME = "http"
+        const val HTTPS_SCHEME = "https"
+    }
+}
+
+/** Public durable hosted-upload lifecycle. */
+public enum class ReproTrailUploadState {
+    /** The trace has not been scheduled. */
+    NOT_SCHEDULED,
+
+    /** Durable work is waiting for its network constraint or retry delay. */
+    ENQUEUED,
+
+    /** A worker has begun its current attempt. */
+    UPLOADING,
+
+    /** The backend created or had already created the identical immutable trace. */
+    SUCCEEDED,
+
+    /** The request was rejected permanently or exhausted bounded retries. */
+    REJECTED,
+}
+
+/** Snapshot of the latest completed trace's durable hosted-upload lifecycle. */
+public data class ReproTrailUploadStatus(
+    /** Stable trace session UUID. */
+    val sessionId: String,
+    /** Last locally persisted upload lifecycle state. */
+    val state: ReproTrailUploadState,
+    /** Number of attempts that reached a worker. */
+    val attemptCount: Int,
+    /** Stable safe rejection category, without backend response content. */
+    val failureReason: String?,
+    /** RFC 3339 successful ingestion time, when available. */
+    val uploadedAt: String?,
+)
+
+/** Identifies newly enqueued unique work and its immutable trace session. */
+public data class ReproTrailUploadTicket(
+    /** Stable trace session UUID used as the backend idempotency key. */
+    val sessionId: String,
+    /** WorkManager identifier for optional host-side observation. */
+    val workId: UUID,
 )
 
 /** Configures privacy controls that are evaluated before an action can be persisted. */
@@ -80,6 +176,7 @@ public enum class ReproTrailRecordingState {
  *
  * Create and close this facade independently of any dependency injection framework used by the host application.
  */
+@Suppress("TooManyFunctions")
 public class ReproTrail private constructor(
     private val graph: IsolatedRuntimeGraph,
 ) : AutoCloseable {
@@ -142,6 +239,34 @@ public class ReproTrail private constructor(
         return graph.captureRuntime.exportLatestTrace()
     }
 
+    /** Enqueues the newest completed trace for explicit, bounded hosted upload. */
+    public suspend fun enqueueLatestTraceUpload(): ReproTrailUploadTicket {
+        checkOpen()
+        val scheduler =
+            checkNotNull(graph.uploadScheduler) {
+                "Hosted upload is not configured for this ReproTrail recorder."
+            }
+        val trace =
+            checkNotNull(graph.traceRepository.loadLatestCompletedSession()) {
+                "Complete at least one trace session before scheduling upload."
+            }
+        return ReproTrailUploadTicket(trace.session.id, scheduler.enqueue(trace.session.id))
+    }
+
+    /** Returns durable upload state for the newest completed trace, if one exists. */
+    public suspend fun latestTraceUploadStatus(): ReproTrailUploadStatus? {
+        checkOpen()
+        return graph.traceRepository.loadLatestCompletedSession()?.session?.let { session ->
+            ReproTrailUploadStatus(
+                sessionId = session.id,
+                state = session.uploadState.toPublicState(),
+                attemptCount = session.uploadAttemptCount,
+                failureReason = session.uploadFailureReason,
+                uploadedAt = session.uploadedAt,
+            )
+        }
+    }
+
     /** Deletes every locally retained trace. */
     public suspend fun deleteAllTraces() {
         checkOpen()
@@ -195,9 +320,43 @@ private class IsolatedRuntimeGraph(
                     single<Context> { context }
                     single { configuration }
                     single<TraceSessionRepository> { RoomTraceSessionRepositoryImpl(database) }
+                    single<TraceUploadStateRepository> { RoomTraceUploadStateRepositoryImpl(database) }
                     single { TraceCaptureRuntime(get(), get(), get()) }
+                    configuration.upload?.let { upload ->
+                        single<TraceUploader> {
+                            HttpTraceUploader(
+                                baseUrl = upload.normalizedBaseUrl,
+                                credentialProvider =
+                                    IngestCredentialProvider {
+                                        upload.credentialProvider.getCredential().also { credential ->
+                                            require(
+                                                credential.isNotBlank(),
+                                            ) { "The ingest credential must not be blank." }
+                                        }
+                                    },
+                            )
+                        }
+                        single {
+                            TraceUploadCoordinator(
+                                projectId = upload.projectId,
+                                traceRepository = get(),
+                                stateRepository = get(),
+                                uploader = get(),
+                                contentEncoder = TraceContentEncoder { TraceJson.encode(it.toTraceDocument()) },
+                            )
+                        }
+                        single { TraceUploadWorkRequestFactory(upload.projectId, upload.maximumAttempts) }
+                        single { TraceUploadWorkScheduler(WorkManager.getInstance(context), get(), get(), get()) }
+                    }
                 },
             )
+        }
+
+    private val registeredUploadCoordinator: TraceUploadCoordinator? =
+        configuration.upload?.let { upload ->
+            application.koin.get<TraceUploadCoordinator>().also { coordinator ->
+                TraceUploadRuntimeRegistry.register(upload.projectId, coordinator)
+            }
         }
 
     val configuration: ReproTrailConfig
@@ -206,9 +365,20 @@ private class IsolatedRuntimeGraph(
     val captureRuntime: TraceCaptureRuntime
         get() = application.koin.get()
 
+    val traceRepository: TraceSessionRepository
+        get() = application.koin.get()
+
+    val uploadScheduler: TraceUploadWorkScheduler?
+        get() = configuration.upload?.let { application.koin.get() }
+
     override fun close() {
+        configuration.upload?.let { upload ->
+            registeredUploadCoordinator?.let { TraceUploadRuntimeRegistry.unregister(upload.projectId, it) }
+        }
         captureRuntime.close()
         database.close()
         application.close()
     }
 }
+
+private fun StoredTraceUploadState.toPublicState(): ReproTrailUploadState = ReproTrailUploadState.valueOf(name)

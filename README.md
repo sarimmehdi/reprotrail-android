@@ -5,9 +5,9 @@
 Privacy-aware Android interaction capture for portable, text-based bug reproduction. ReproTrail records a semantic sequence of user actions, exports canonical JSON, and turns it into a repeatable [Maestro](https://maestro.mobile.dev/) flow through [ReproTrail CLI](https://github.com/sarimmehdi/reprotrail-cli).
 
 > [!IMPORTANT]
-> This repository is a source-level Android capture alpha, not a published production SDK. It is intended for controlled internal testing. It has no hosted upload, automatic Gradle instrumentation, consent UI, or stable binary artifact yet.
+> This repository is a source-level Android capture and hosted-upload alpha, not a published production SDK. It is intended for controlled internal testing. It has no automatic Gradle instrumentation, consent UI, or stable binary artifact yet.
 
-## Milestone 3 status
+## Milestone 4 Android status
 
 The Android capture alpha now provides:
 
@@ -18,6 +18,8 @@ The Android capture alpha now provides:
 5. Durable Room storage with bounded sessions, actions, and asynchronous pending work.
 6. Canonical local JSON export, trace deletion, startup capture policy, and a runtime privacy kill switch.
 7. A private Koin graph that remains independent of the host application's no-DI, manual-DI, Hilt, or Koin ownership model.
+8. Explicit authenticated upload through Retrofit and unique network-constrained WorkManager jobs with bounded exponential retry.
+9. Durable Room upload lifecycle, attempt count, safe terminal reason, and successful-ingestion time.
 
 The trace format is owned by [reprotrail-spec](https://github.com/sarimmehdi/reprotrail-spec). ReproTrail CLI validates an exported trace and converts supported actions into Maestro instructions; Maestro is not embedded in the recording library.
 
@@ -28,6 +30,8 @@ The trace format is owned by [reprotrail-spec](https://github.com/sarimmehdi/rep
 | `runtime/` | DI-neutral public facade, capture lifecycle, gesture classification, View target resolution, bounded persistence, and export |
 | `runtime/domain/` | Persistence models and repository contract |
 | `runtime/data/` | Room entities, DAOs, database, and repository implementation |
+| `runtime/upload/domain/` | Framework-independent hosted-upload request, outcome, and credential contracts |
+| `runtime/upload/data/` | Retrofit transport and backend status mapping |
 | `runtime-compose/` | Optional, explicitly selected Compose `testTag` resolver |
 | `app/` | Controlled Android Views fixture used for capture and replay acceptance |
 | `build-logic/` | Generated conventions plus SDK dependency isolation |
@@ -105,6 +109,45 @@ Close the facade when its owner is permanently released. Stop an active session 
 recorder.close()
 ```
 
+## Hosted upload
+
+Hosted upload is opt-in and explicit. Configure a project, HTTPS backend, and host-owned credential provider when creating the recorder:
+
+```kotlin
+val recorder = ReproTrail.create(
+    applicationContext,
+    ReproTrailConfig(
+        policyVersion = "internal-test-v1",
+        upload = ReproTrailUploadConfig(
+            baseUrl = "https://reprotrail.example.com/",
+            projectId = projectId,
+            credentialProvider = ReproTrailIngestCredentialProvider {
+                credentialStore.currentIngestToken()
+            },
+        ),
+    ),
+)
+```
+
+After stopping a session, enqueue the newest completed trace and optionally inspect its durable state:
+
+```kotlin
+val ticket = recorder.enqueueLatestTraceUpload()
+val status = recorder.latestTraceUploadStatus()
+```
+
+The session UUID is sent as `Idempotency-Key`. A backend `201` and an identical retry returning `200` both complete successfully. Authentication, validation, conflict, and payload-size responses stop permanently; throttling, I/O failure, and server failure retry exponentially from WorkManager's 10-second minimum. The default is five total attempts and the allowed configuration range is one through ten.
+
+The raw credential is requested only when an HTTP attempt starts. It is never written to Room, WorkManager input/output, trace JSON, or ReproTrail logs. WorkManager data contains only project ID, session ID, and maximum attempt count; trace content is reconstructed from the private Room database immediately before transport.
+
+HTTPS is mandatory by default. `allowInsecureHttp = true` exists only for controlled local development and does not override Android's own cleartext-network policy.
+
+### Process recreation requirement
+
+WorkManager persists requests across process death and reboot, but intentionally cannot persist a credential provider. An upload-enabled `ReproTrail` instance for that project must therefore be recreated from `Application.onCreate` before a pending worker runs. If the graph is temporarily unavailable, the worker consumes a bounded retry without reading or persisting a credential. Only one live recorder may register the same project ID.
+
+Use an application-owned recorder for hosted upload. Activity-retained ownership remains appropriate for capture-only flows, but closing an upload-enabled recorder unregisters its in-memory credential bridge; pending work can continue only after the application recreates it.
+
 The sample app provides a complete Views fixture in [`MainActivity.kt`](app/src/main/java/dev/reprotrail/sample/MainActivity.kt).
 
 ## Stable selectors
@@ -149,7 +192,7 @@ The public boundary consists of `ReproTrail.create`, configuration values, and t
 
 ### No DI framework
 
-Create the facade directly in an Android owner and close it with that owner. This is the approach used by the sample app.
+Create the facade directly in an Android owner and close it with that owner. For hosted upload, implement `ReproTrailIngestCredentialProvider` with an application-owned secure credential store and create the recorder from `Application.onCreate`.
 
 ### Manual DI
 
@@ -162,6 +205,8 @@ class AppContainer(context: Context) : AutoCloseable {
     override fun close() = reproTrail.close()
 }
 ```
+
+The same composition root can construct the credential provider and pass it only through `ReproTrailUploadConfig`; no internal ReproTrail type is exposed.
 
 ### Hilt
 
@@ -181,6 +226,8 @@ object ReproTrailModule {
 
 Choose a different host scope if the recording lifecycle differs, and arrange explicit `close()` ownership. Do not expose or bind internal runtime classes.
 
+For hosted upload, bind `ReproTrailIngestCredentialProvider` and the recorder in `SingletonComponent`, then inject or otherwise request the recorder during `Application.onCreate` so construction establishes the worker bridge before pending work runs. The provider may delegate to a Hilt-owned secure credential repository; ReproTrail does not access the Hilt graph directly.
+
 ### Koin
 
 A Koin host may bind the public facade in its own graph:
@@ -190,6 +237,8 @@ val hostModule = module {
     single { ReproTrail.create(androidContext(), reproTrailConfig) }
 }
 ```
+
+A Koin host can bind `ReproTrailIngestCredentialProvider` in its own application graph and pass `get()` into `ReproTrailUploadConfig`. The consuming graph and ReproTrail's private `koinApplication` remain separate; the same approach works when the host uses Hilt, manual DI, or no DI framework.
 
 Each recorder internally uses `koinApplication`, following Koin's [context-isolation guidance](https://insert-koin.io/docs/reference/koin-core/context-isolation/). It does not start, read, stop, or mutate Koin's global context. Tests cover all four host models, independent recorder instances, and shutdown while a host Koin graph remains usable.
 
@@ -233,7 +282,7 @@ The alpha records structural replay metadata:
 - target bounds and normalized coordinate fallback;
 - package, display, locale, UI mode, font scale, API level, and host policy version.
 
-It does not capture typed input, screenshots, arbitrary View tags, full accessibility or Compose trees, authentication tokens, network payloads, or screen video.
+It does not capture typed input, screenshots, arbitrary View tags, full accessibility or Compose trees, authentication tokens, backend response bodies, or screen video.
 
 Set `captureEnabledAtStartup = false` when policy must enable recording later. Calling `setCaptureEnabled(false)` immediately pauses an active session. Re-enabling capture does not silently resume it; the host must call `resumeRecording()` explicitly.
 
@@ -246,7 +295,9 @@ Do not enable this alpha for production users. A production rollout still requir
 - Back presses, keyboard/IME actions, typed text, and semantic scroll commands are not captured.
 - An interrupted active session remains durable in Room but is not automatically resumed or exportable as a completed trace after process restart.
 - Export always targets the newest eligible completed session and replaces the previous local file.
-- There is no backend upload, WorkManager transport, authentication, or replay service yet; those belong to later milestones.
+- Upload currently targets only the newest completed trace and requires an application-owned recorder to recreate the in-memory credential bridge before pending workers run.
+- There is no Android API for listing every retained trace or cancelling/deleting one pending upload yet.
+- The hosted backend's developer read/download/delete, retention, audit, reconciliation, provisioning, and deployment slices remain incomplete.
 - Environment parity is recorded but not enforced before replay.
 - The runtime is source-only and has no binary-compatibility guarantee.
 

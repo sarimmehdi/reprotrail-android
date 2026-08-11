@@ -12,8 +12,11 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dev.reprotrail.runtime.domain.model.StoredTraceUploadState
+import dev.reprotrail.runtime.domain.repository.TraceSessionRepository
 import dev.reprotrail.runtime.domain.repository.TraceUploadStateRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -57,24 +60,32 @@ internal class TraceUploadWorkRequestFactory(
 internal class TraceUploadWorkScheduler(
     private val workManager: WorkManager,
     private val requestFactory: TraceUploadWorkRequestFactory,
+    private val traceRepository: TraceSessionRepository,
     private val stateRepository: TraceUploadStateRepository,
 ) {
-    suspend fun enqueue(sessionId: String): UUID {
-        stateRepository.updateUploadState(
-            sessionId,
-            StoredTraceUploadState.ENQUEUED,
-            0,
-            null,
-            null,
-        )
-        val request = requestFactory.create(sessionId)
-        workManager.enqueueUniqueWork(
-            requestFactory.uniqueWorkName(sessionId),
-            ExistingWorkPolicy.KEEP,
-            request,
-        )
-        return request.id
-    }
+    private val enqueueMutex = Mutex()
+
+    suspend fun enqueue(sessionId: String): UUID =
+        enqueueMutex.withLock {
+            val state = checkNotNull(traceRepository.loadSession(sessionId)).session.uploadState
+            check(state == StoredTraceUploadState.NOT_SCHEDULED || state == StoredTraceUploadState.REJECTED) {
+                "The trace upload is already scheduled or completed."
+            }
+            stateRepository.updateUploadState(
+                sessionId,
+                StoredTraceUploadState.ENQUEUED,
+                0,
+                null,
+                null,
+            )
+            val request = requestFactory.create(sessionId)
+            workManager.enqueueUniqueWork(
+                requestFactory.uniqueWorkName(sessionId),
+                ExistingWorkPolicy.KEEP,
+                request,
+            )
+            request.id
+        }
 }
 
 /** Executes one bounded hosted trace-upload attempt scheduled by ReproTrail. */
