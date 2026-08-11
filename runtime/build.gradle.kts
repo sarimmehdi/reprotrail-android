@@ -17,6 +17,9 @@ libraryConfig {
 dependencies {
     implementation(project(":runtime:data"))
     implementation(project(":runtime:domain"))
+    implementation(project(":runtime:upload:data"))
+    implementation(project(":runtime:upload:domain"))
+    implementation(libs.androidxWorkRuntimeLibrary)
     implementation(libs.bundles.roomBundle)
     implementation(libs.kotlinxCoroutinesCoreLibrary)
     implementation(libs.kotlinxSerializationJsonLibrary)
@@ -25,4 +28,5 @@ dependencies {
     testImplementation(libs.koinTestLibrary)
     testImplementation(libs.hiltAndroidLibrary)
     testImplementation(libs.roboelectricLibrary)
+    testImplementation(libs.androidxWorkTestingLibrary)
 }

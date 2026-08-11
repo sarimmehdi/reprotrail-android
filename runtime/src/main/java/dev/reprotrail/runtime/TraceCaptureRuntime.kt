@@ -140,32 +140,9 @@ internal class TraceCaptureRuntime(
             checkNotNull(repository.loadLatestCompletedSession()) {
                 "Complete at least one trace session before exporting."
             }
-        val environment =
-            checkNotNull(trace.session.environmentJson) {
-                "The latest completed trace does not contain an eligible action."
-            }
-        val actions = trace.actions.map { TraceJson.decodeAction(it.payloadJson) }
-        val document =
-            TraceDocument(
-                session =
-                    TraceSession(
-                        id = trace.session.id,
-                        startedAt = trace.session.startedAt,
-                        endedAt = trace.session.endedAt,
-                        durationMs = trace.session.durationMs,
-                    ),
-                application = TraceApplication(packageName = trace.session.packageName),
-                environment = TraceJson.decodeEnvironment(environment),
-                privacy =
-                    TracePrivacy(
-                        policyVersion = trace.session.policyVersion,
-                        selectorText = if (actions.any(TraceAction::hasVisibleSelector)) "allowlisted" else "disabled",
-                    ),
-                actions = actions,
-            )
         val directory = File(context.getExternalFilesDir(null) ?: context.filesDir, EXPORT_DIRECTORY)
         check(directory.exists() || directory.mkdirs()) { "Could not create trace export directory." }
-        return File(directory, LATEST_TRACE_FILE).apply { writeText(TraceJson.encode(document)) }
+        return File(directory, LATEST_TRACE_FILE).apply { writeText(TraceJson.encode(trace.toTraceDocument())) }
     }
 
     suspend fun deleteAllTraces() {
@@ -187,6 +164,31 @@ internal class TraceCaptureRuntime(
         const val EXPORT_DIRECTORY = "reprotrail"
         const val LATEST_TRACE_FILE = "latest-trace.json"
     }
+}
+
+internal fun dev.reprotrail.runtime.domain.model.StoredTrace.toTraceDocument(): TraceDocument {
+    val environment =
+        checkNotNull(session.environmentJson) {
+            "The completed trace does not contain an eligible action."
+        }
+    val decodedActions = actions.map { TraceJson.decodeAction(it.payloadJson) }
+    return TraceDocument(
+        session =
+            TraceSession(
+                id = session.id,
+                startedAt = session.startedAt,
+                endedAt = session.endedAt,
+                durationMs = session.durationMs,
+            ),
+        application = TraceApplication(packageName = session.packageName),
+        environment = TraceJson.decodeEnvironment(environment),
+        privacy =
+            TracePrivacy(
+                policyVersion = session.policyVersion,
+                selectorText = if (decodedActions.any(TraceAction::hasVisibleSelector)) "allowlisted" else "disabled",
+            ),
+        actions = decodedActions,
+    )
 }
 
 private data class ActiveSession(
