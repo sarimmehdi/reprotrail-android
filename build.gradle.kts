@@ -1,5 +1,5 @@
 plugins {
-    id("com.sarim.clean-android-skeleton")
+    id("io.github.sarimmehdi.clean-android-skeleton")
     alias(libs.plugins.androidApplicationPlugin) apply false
     alias(libs.plugins.kotlinComposePlugin) apply false
     alias(libs.plugins.ktlintPlugin) apply false

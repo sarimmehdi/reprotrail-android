@@ -34,7 +34,7 @@ The trace format is owned by [reprotrail-spec](https://github.com/sarimmehdi/rep
 | `scripts/` | Repeatable local and CI verification helpers |
 | `tools/clean-android-skeleton-gradle-plugin/` | Pinned generator source as a Git submodule |
 
-The project foundation and persistence layers were generated with [`com.sarim.clean-android-skeleton`](https://github.com/sarimmehdi/clean-android-skeleton-gradle-plugin). ReproTrail-specific behavior was then developed contract-first with focused tests.
+The project foundation and persistence layers were generated with [`io.github.sarimmehdi.clean-android-skeleton`](https://github.com/sarimmehdi/clean-android-skeleton-gradle-plugin). ReproTrail-specific behavior was then developed contract-first with focused tests.
 
 ## Build and verify
 
