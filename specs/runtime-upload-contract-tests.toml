@@ -1,0 +1,107 @@
+[contractTest.suite.HttpTraceUploaderTest]
+layer = "data"
+packageSuffix = "http"
+imports = [
+    "dev.reprotrail.runtime.upload.domain.credential.IngestCredentialProvider",
+    "dev.reprotrail.runtime.upload.domain.model.TraceUpload",
+    "dev.reprotrail.runtime.upload.domain.model.TraceUploadOutcome",
+    "dev.reprotrail.runtime.upload.domain.model.TraceUploadRejection",
+    "kotlinx.coroutines.test.runTest",
+    "okhttp3.mockwebserver.MockResponse",
+    "okhttp3.mockwebserver.MockWebServer",
+    "org.junit.Assert.assertEquals",
+]
+properties = [
+    "private lateinit var server: MockWebServer",
+    "private val credentialProvider = IngestCredentialProvider { \"rt_ingest_test.secret\" }",
+    '''
+private fun uploader(): HttpTraceUploader =
+    HttpTraceUploader(
+        baseUrl = server.url("/").toString(),
+        credentialProvider = credentialProvider,
+    )
+
+private fun upload(): TraceUpload =
+    TraceUpload(
+        projectId = "11111111-1111-1111-1111-111111111111",
+        sessionId = "22222222-2222-2222-2222-222222222222",
+        content = "{\"schemaVersion\":1}",
+    )
+''',
+]
+beforeEach = "server = MockWebServer().also { it.start() }"
+afterEach = "server.shutdown()"
+
+[[contractTest.suite.HttpTraceUploaderTest.cases]]
+name = "created upload sends the authenticated immutable ingest request"
+runTest = true
+given = "server.enqueue(MockResponse().setResponseCode(201))"
+when = '''
+val outcome = uploader().upload(upload())
+val request = server.takeRequest()
+'''
+then = '''
+assertEquals(TraceUploadOutcome.Created, outcome)
+assertEquals("POST", request.method)
+assertEquals("/v1/projects/11111111-1111-1111-1111-111111111111/traces", request.path)
+assertEquals("Bearer rt_ingest_test.secret", request.getHeader("Authorization"))
+assertEquals("22222222-2222-2222-2222-222222222222", request.getHeader("Idempotency-Key"))
+assertEquals("application/json; charset=utf-8", request.getHeader("Content-Type"))
+assertEquals("{\"schemaVersion\":1}", request.body.readUtf8())
+'''
+
+[[contractTest.suite.HttpTraceUploaderTest.cases]]
+name = "identical retry is a successful existing upload"
+runTest = true
+given = "server.enqueue(MockResponse().setResponseCode(200))"
+when = "val outcome = uploader().upload(upload())"
+then = "assertEquals(TraceUploadOutcome.AlreadyStored, outcome)"
+
+[[contractTest.suite.HttpTraceUploaderTest.cases]]
+name = "client responses preserve their terminal rejection reason"
+runTest = true
+given = '''
+val expected = listOf(
+    400 to TraceUploadRejection.INVALID_REQUEST,
+    401 to TraceUploadRejection.UNAUTHORIZED,
+    409 to TraceUploadRejection.IDEMPOTENCY_CONFLICT,
+    413 to TraceUploadRejection.PAYLOAD_TOO_LARGE,
+    422 to TraceUploadRejection.UNPROCESSABLE_TRACE,
+)
+expected.forEach { (status, _) -> server.enqueue(MockResponse().setResponseCode(status)) }
+'''
+when = "val outcomes = expected.map { uploader().upload(upload()) }"
+then = '''
+assertEquals(
+    expected.map { (_, reason) -> TraceUploadOutcome.Rejected(reason) },
+    outcomes,
+)
+'''
+
+[[contractTest.suite.HttpTraceUploaderTest.cases]]
+name = "unknown client response remains terminal"
+runTest = true
+given = "server.enqueue(MockResponse().setResponseCode(418))"
+when = "val outcome = uploader().upload(upload())"
+then = '''
+assertEquals(
+    TraceUploadOutcome.Rejected(TraceUploadRejection.UNKNOWN_CLIENT_ERROR),
+    outcome,
+)
+'''
+
+[[contractTest.suite.HttpTraceUploaderTest.cases]]
+name = "server failure is retryable"
+runTest = true
+given = '''
+server.enqueue(MockResponse().setResponseCode(429))
+server.enqueue(MockResponse().setResponseCode(503))
+'''
+when = '''
+val rateLimited = uploader().upload(upload())
+val unavailable = uploader().upload(upload())
+'''
+then = '''
+assertEquals(TraceUploadOutcome.RetryableFailure, rateLimited)
+assertEquals(TraceUploadOutcome.RetryableFailure, unavailable)
+'''

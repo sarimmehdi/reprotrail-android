@@ -1,0 +1,30 @@
+[domain.model.TraceUpload]
+kind = "data_class"
+description = "Immutable trace content and tenant identifiers required for one idempotent hosted upload."
+
+[[domain.model.TraceUpload.properties]]
+name = "projectId"
+type = "String"
+description = "Backend project UUID that scopes authentication and storage."
+
+[[domain.model.TraceUpload.properties]]
+name = "sessionId"
+type = "String"
+description = "Trace session UUID reused as the backend idempotency key."
+
+[[domain.model.TraceUpload.properties]]
+name = "content"
+type = "String"
+description = "Canonical privacy-reviewed trace JSON sent without mutation."
+
+[domain.model.TraceUploadRejection]
+kind = "enum_class"
+description = "Permanent backend rejection categories that must not be retried automatically."
+values = [
+    "INVALID_REQUEST",
+    "UNAUTHORIZED",
+    "IDEMPOTENCY_CONFLICT",
+    "PAYLOAD_TOO_LARGE",
+    "UNPROCESSABLE_TRACE",
+    "UNKNOWN_CLIENT_ERROR",
+]

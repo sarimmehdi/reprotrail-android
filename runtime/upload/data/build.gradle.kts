@@ -20,6 +20,10 @@ libraryConfig {
 
 dependencies {
     implementation(libs.kotlinxCoroutinesCoreLibrary)
+    implementation(libs.okhttpLibrary)
+    implementation(libs.retrofitLibrary)
+
+    testImplementation(libs.mockWebServerLibrary)
 
     androidTestImplementation(libs.androidxJunitLibrary)
     androidTestImplementation(libs.androidxTestCoreLibrary)
