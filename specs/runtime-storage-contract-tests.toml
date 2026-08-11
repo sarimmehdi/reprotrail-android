@@ -8,9 +8,11 @@ imports = [
     "androidx.test.core.app.ApplicationProvider",
     "androidx.test.ext.junit.runners.AndroidJUnit4",
     "dev.reprotrail.runtime.data.database.ReproTrailDatabase",
+    "dev.reprotrail.runtime.data.repository.RoomTraceUploadStateRepositoryImpl",
     "dev.reprotrail.runtime.domain.model.StoredTraceAction",
     "dev.reprotrail.runtime.domain.model.StoredTraceSession",
     "dev.reprotrail.runtime.domain.model.StoredTraceSessionState",
+    "dev.reprotrail.runtime.domain.model.StoredTraceUploadState",
     "kotlinx.coroutines.async",
     "kotlinx.coroutines.awaitAll",
     "org.junit.Assert.assertEquals",
@@ -21,6 +23,7 @@ imports = [
 properties = [
     "private lateinit var database: ReproTrailDatabase",
     "private lateinit var repository: RoomTraceSessionRepositoryImpl",
+    "private lateinit var uploadRepository: RoomTraceUploadStateRepositoryImpl",
     '''
 private fun session(
     id: String,
@@ -37,6 +40,10 @@ private fun session(
         createdAtEpochMs = createdAtEpochMs,
         endedAt = null,
         durationMs = null,
+        uploadState = StoredTraceUploadState.NOT_SCHEDULED,
+        uploadAttemptCount = 0,
+        uploadFailureReason = null,
+        uploadedAt = null,
     )
 
 private fun action(
@@ -58,6 +65,7 @@ database = Room.inMemoryDatabaseBuilder(
     ReproTrailDatabase::class.java,
 ).build()
 repository = RoomTraceSessionRepositoryImpl(database)
+uploadRepository = RoomTraceUploadStateRepositoryImpl(database)
 '''
 afterEach = "database.close()"
 
@@ -138,4 +146,30 @@ when = "val latest = repository.loadLatestCompletedSession()"
 then = '''
 assertEquals("completed", latest?.session?.id)
 assertEquals(StoredTraceSessionState.COMPLETED, latest?.session?.state)
+'''
+
+[[contractTest.suite.RoomTraceSessionRepositoryTest.cases]]
+name = "upload lifecycle survives repository recreation"
+runTest = true
+given = '''
+val session = session(id = "upload-state", createdAtEpochMs = 1)
+repository.startSession(session, retainedSessionCount = 1)
+repository.completeSession(session.id, endedAt = "2026-08-10T10:00:01Z", durationMs = 1000)
+'''
+when = '''
+uploadRepository.updateUploadState(
+    sessionId = session.id,
+    state = StoredTraceUploadState.REJECTED,
+    attemptCount = 2,
+    failureReason = "UNAUTHORIZED",
+    uploadedAt = null,
+)
+uploadRepository = RoomTraceUploadStateRepositoryImpl(database)
+val restored = repository.loadSession(session.id)?.session
+'''
+then = '''
+assertEquals(StoredTraceUploadState.REJECTED, restored?.uploadState)
+assertEquals(2, restored?.uploadAttemptCount)
+assertEquals("UNAUTHORIZED", restored?.uploadFailureReason)
+assertNull(restored?.uploadedAt)
 '''

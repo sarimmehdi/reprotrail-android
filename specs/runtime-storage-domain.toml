@@ -3,6 +3,11 @@ kind = "enum_class"
 description = "Durable lifecycle state of a locally captured trace session."
 values = ["ACTIVE", "PAUSED", "COMPLETED"]
 
+[domain.model.StoredTraceUploadState]
+kind = "enum_class"
+description = "Durable local lifecycle of a hosted trace upload."
+values = ["NOT_SCHEDULED", "ENQUEUED", "UPLOADING", "SUCCEEDED", "REJECTED"]
+
 [domain.model.StoredTraceSession]
 kind = "data_class"
 description = "Metadata required to recover and export one locally captured trace session."
@@ -59,6 +64,30 @@ name = "durationMs"
 type = "Long?"
 defaultValue = "null"
 description = "Monotonic elapsed duration of a completed session."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "uploadState"
+type = "StoredTraceUploadState"
+defaultValue = "StoredTraceUploadState.NOT_SCHEDULED"
+description = "Last durable hosted-upload lifecycle state."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "uploadAttemptCount"
+type = "Int"
+defaultValue = "0"
+description = "Number of hosted upload attempts that reached the worker."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "uploadFailureReason"
+type = "String?"
+defaultValue = "null"
+description = "Stable terminal rejection category, without backend content or credentials."
+
+[[domain.model.StoredTraceSession.properties]]
+name = "uploadedAt"
+type = "String?"
+defaultValue = "null"
+description = "RFC 3339 time at which hosted ingestion became durable."
 
 [domain.model.StoredTraceAction]
 kind = "data_class"
@@ -224,3 +253,32 @@ type = "String"
 name = "deleteAllSessions"
 suspend = true
 description = "Deletes every locally retained trace and action."
+
+[domain.repository.TraceUploadStateRepository]
+description = "Persists hosted-upload lifecycle independently from trace capture operations."
+imports = ["dev.reprotrail.runtime.domain.model.StoredTraceUploadState"]
+
+[[domain.repository.TraceUploadStateRepository.functions]]
+name = "updateUploadState"
+suspend = true
+description = "Atomically stores the latest hosted-upload lifecycle and safe diagnostic metadata."
+
+[[domain.repository.TraceUploadStateRepository.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[domain.repository.TraceUploadStateRepository.functions.parameters]]
+name = "state"
+type = "StoredTraceUploadState"
+
+[[domain.repository.TraceUploadStateRepository.functions.parameters]]
+name = "attemptCount"
+type = "Int"
+
+[[domain.repository.TraceUploadStateRepository.functions.parameters]]
+name = "failureReason"
+type = "String?"
+
+[[domain.repository.TraceUploadStateRepository.functions.parameters]]
+name = "uploadedAt"
+type = "String?"

@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import dev.reprotrail.runtime.domain.model.StoredTraceSession
 import dev.reprotrail.runtime.domain.model.StoredTraceSessionState
+import dev.reprotrail.runtime.domain.model.StoredTraceUploadState
 import dev.reprotrail.runtime.domain.repository.TraceSessionRepository
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -52,6 +53,10 @@ internal class TraceCaptureRuntime(
                         createdAtEpochMs = System.currentTimeMillis(),
                         endedAt = null,
                         durationMs = null,
+                        uploadState = StoredTraceUploadState.NOT_SCHEDULED,
+                        uploadAttemptCount = 0,
+                        uploadFailureReason = null,
+                        uploadedAt = null,
                     ),
                 retainedSessionCount = configuration.storage.maxRetainedSessions,
             )

@@ -8,6 +8,7 @@ import dev.reprotrail.runtime.domain.model.StoredTrace
 import dev.reprotrail.runtime.domain.model.StoredTraceAction
 import dev.reprotrail.runtime.domain.model.StoredTraceSession
 import dev.reprotrail.runtime.domain.model.StoredTraceSessionState
+import dev.reprotrail.runtime.domain.model.StoredTraceUploadState
 import dev.reprotrail.runtime.domain.repository.TraceSessionRepository
 
 /** Implements bounded trace-session persistence with atomic Room transactions. */
@@ -58,7 +59,7 @@ class RoomTraceSessionRepositoryImpl(
     override suspend fun recordDroppedActions(
         sessionId: String,
         droppedActionCount: Int,
-    ) {
+    ) = run {
         require(droppedActionCount >= 0) { "A dropped action count cannot be negative." }
         if (droppedActionCount > 0) {
             database.traceSessionDao().incrementDroppedActionCountBy(sessionId, droppedActionCount)
@@ -114,6 +115,10 @@ private fun StoredTraceSession.toEntity(): TraceSessionEntity =
         createdAtEpochMs = createdAtEpochMs,
         endedAt = endedAt,
         durationMs = durationMs,
+        uploadState = uploadState.name,
+        uploadAttemptCount = uploadAttemptCount,
+        uploadFailureReason = uploadFailureReason,
+        uploadedAt = uploadedAt,
     )
 
 private fun TraceSessionEntity.toDomain(): StoredTraceSession =
@@ -128,6 +133,10 @@ private fun TraceSessionEntity.toDomain(): StoredTraceSession =
         createdAtEpochMs = createdAtEpochMs,
         endedAt = endedAt,
         durationMs = durationMs,
+        uploadState = uploadState?.let(StoredTraceUploadState::valueOf) ?: StoredTraceUploadState.NOT_SCHEDULED,
+        uploadAttemptCount = uploadAttemptCount ?: 0,
+        uploadFailureReason = uploadFailureReason,
+        uploadedAt = uploadedAt,
     )
 
 private fun StoredTraceAction.toEntity(): TraceActionEntity =

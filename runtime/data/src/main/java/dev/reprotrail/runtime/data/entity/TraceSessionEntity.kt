@@ -27,4 +27,12 @@ data class TraceSessionEntity(
     val endedAt: String? = null,
     /** Monotonic duration of a completed session. */
     val durationMs: Long? = null,
+    /** Persisted hosted-upload lifecycle state. */
+    val uploadState: String? = null,
+    /** Number of upload attempts that reached the worker. */
+    val uploadAttemptCount: Int? = null,
+    /** Stable safe terminal rejection category. */
+    val uploadFailureReason: String? = null,
+    /** RFC 3339 successful hosted-ingestion time. */
+    val uploadedAt: String? = null,
 )

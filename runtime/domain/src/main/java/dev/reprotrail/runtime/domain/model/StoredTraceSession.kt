@@ -22,4 +22,12 @@ data class StoredTraceSession(
     val endedAt: String?,
     /** Monotonic elapsed duration of a completed session. */
     val durationMs: Long?,
+    /** Last durable hosted-upload lifecycle state. */
+    val uploadState: StoredTraceUploadState,
+    /** Number of hosted upload attempts that reached the worker. */
+    val uploadAttemptCount: Int,
+    /** Stable terminal rejection category, without backend content or credentials. */
+    val uploadFailureReason: String?,
+    /** RFC 3339 time at which hosted ingestion became durable. */
+    val uploadedAt: String?,
 )

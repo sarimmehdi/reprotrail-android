@@ -3,10 +3,12 @@ package dev.reprotrail.runtime.data.repository
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import dev.reprotrail.runtime.data.database.ReproTrailDatabase
+import dev.reprotrail.runtime.`data`.database.ReproTrailDatabase
+import dev.reprotrail.runtime.`data`.repository.RoomTraceUploadStateRepositoryImpl
 import dev.reprotrail.runtime.domain.model.StoredTraceAction
 import dev.reprotrail.runtime.domain.model.StoredTraceSession
 import dev.reprotrail.runtime.domain.model.StoredTraceSessionState
+import dev.reprotrail.runtime.domain.model.StoredTraceUploadState
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
@@ -24,6 +26,8 @@ class RoomTraceSessionRepositoryTest {
 
     private lateinit var repository: RoomTraceSessionRepositoryImpl
 
+    private lateinit var uploadRepository: RoomTraceUploadStateRepositoryImpl
+
     private fun session(
         id: String,
         createdAtEpochMs: Long,
@@ -39,6 +43,10 @@ class RoomTraceSessionRepositoryTest {
             createdAtEpochMs = createdAtEpochMs,
             endedAt = null,
             durationMs = null,
+            uploadState = StoredTraceUploadState.NOT_SCHEDULED,
+            uploadAttemptCount = 0,
+            uploadFailureReason = null,
+            uploadedAt = null,
         )
 
     private fun action(
@@ -62,6 +70,7 @@ class RoomTraceSessionRepositoryTest {
                     ReproTrailDatabase::class.java,
                 ).build()
         repository = RoomTraceSessionRepositoryImpl(database)
+        uploadRepository = RoomTraceUploadStateRepositoryImpl(database)
     }
 
     @After
@@ -79,10 +88,7 @@ class RoomTraceSessionRepositoryTest {
             repository.appendAction(action(session.id, sequence = 1), maximumActionCount = 3)
             repository.appendAction(action(session.id, sequence = 0), maximumActionCount = 3)
             // Then
-            assertEquals(
-                listOf(0, 1),
-                repository.loadSession(session.id)?.actions?.map { it.sequence },
-            )
+            assertEquals(listOf(0, 1), repository.loadSession(session.id)?.actions?.map { it.sequence })
         }
 
     @Test
@@ -95,9 +101,7 @@ class RoomTraceSessionRepositoryTest {
             val accepted =
                 (0 until 20)
                     .map { sequence ->
-                        async {
-                            repository.appendAction(action(session.id, sequence), maximumActionCount = 5)
-                        }
+                        async { repository.appendAction(action(session.id, sequence), maximumActionCount = 5) }
                     }.awaitAll()
             val stored = repository.loadSession(session.id)
             // Then
@@ -145,5 +149,29 @@ class RoomTraceSessionRepositoryTest {
             // Then
             assertEquals("completed", latest?.session?.id)
             assertEquals(StoredTraceSessionState.COMPLETED, latest?.session?.state)
+        }
+
+    @Test
+    fun `upload lifecycle survives repository recreation`() =
+        runTest {
+            // Given
+            val session = session(id = "upload-state", createdAtEpochMs = 1)
+            repository.startSession(session, retainedSessionCount = 1)
+            repository.completeSession(session.id, endedAt = "2026-08-10T10:00:01Z", durationMs = 1000)
+            // When
+            uploadRepository.updateUploadState(
+                sessionId = session.id,
+                state = StoredTraceUploadState.REJECTED,
+                attemptCount = 2,
+                failureReason = "UNAUTHORIZED",
+                uploadedAt = null,
+            )
+            uploadRepository = RoomTraceUploadStateRepositoryImpl(database)
+            val restored = repository.loadSession(session.id)?.session
+            // Then
+            assertEquals(StoredTraceUploadState.REJECTED, restored?.uploadState)
+            assertEquals(2, restored?.uploadAttemptCount)
+            assertEquals("UNAUTHORIZED", restored?.uploadFailureReason)
+            assertNull(restored?.uploadedAt)
         }
 }

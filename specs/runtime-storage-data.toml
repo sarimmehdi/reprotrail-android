@@ -62,6 +62,30 @@ type = "Long?"
 defaultValue = "null"
 description = "Monotonic duration of a completed session."
 
+[[data.entity.TraceSessionEntity.properties]]
+name = "uploadState"
+type = "String?"
+defaultValue = "null"
+description = "Persisted hosted-upload lifecycle state."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "uploadAttemptCount"
+type = "Int?"
+defaultValue = "null"
+description = "Number of upload attempts that reached the worker."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "uploadFailureReason"
+type = "String?"
+defaultValue = "null"
+description = "Stable safe terminal rejection category."
+
+[[data.entity.TraceSessionEntity.properties]]
+name = "uploadedAt"
+type = "String?"
+defaultValue = "null"
+description = "RFC 3339 successful hosted-ingestion time."
+
 [data.entity.TraceActionEntity]
 kind = "room_entity"
 description = "Room representation of one canonical privacy-reviewed action."
@@ -210,6 +234,36 @@ description = "Loads one trace session by UUID."
 name = "sessionId"
 type = "String"
 
+[data.dao.TraceUploadDao]
+description = "Persists hosted-upload lifecycle transitions for retained trace sessions."
+
+[[data.dao.TraceUploadDao.functions]]
+kind = "query"
+name = "updateUploadState"
+suspend = true
+sql = "UPDATE trace_sessions SET uploadState = :state, uploadAttemptCount = :attemptCount, uploadFailureReason = :failureReason, uploadedAt = :uploadedAt WHERE id = :sessionId"
+description = "Atomically persists one hosted-upload lifecycle transition."
+
+[[data.dao.TraceUploadDao.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.dao.TraceUploadDao.functions.parameters]]
+name = "state"
+type = "String"
+
+[[data.dao.TraceUploadDao.functions.parameters]]
+name = "attemptCount"
+type = "Int"
+
+[[data.dao.TraceUploadDao.functions.parameters]]
+name = "failureReason"
+type = "String?"
+
+[[data.dao.TraceUploadDao.functions.parameters]]
+name = "uploadedAt"
+type = "String?"
+
 [[data.dao.TraceActionDao.functions]]
 kind = "query"
 name = "findActions"
@@ -281,8 +335,8 @@ description = "Deletes all retained session rows."
 [data.database.ReproTrailDatabase]
 description = "Room database containing bounded local ReproTrail sessions and actions."
 entities = ["TraceSessionEntity", "TraceActionEntity"]
-daos = ["TraceSessionDao", "TraceActionDao"]
-version = 1
+daos = ["TraceSessionDao", "TraceActionDao", "TraceUploadDao"]
+version = 2
 databaseName = "reprotrail.db"
 
 [data.repository.RoomTraceSessionRepositoryImpl]
@@ -297,6 +351,7 @@ imports = [
     "dev.reprotrail.runtime.domain.model.StoredTraceAction",
     "dev.reprotrail.runtime.domain.model.StoredTraceSession",
     "dev.reprotrail.runtime.domain.model.StoredTraceSessionState",
+    "dev.reprotrail.runtime.domain.model.StoredTraceUploadState",
 ]
 
 [[data.repository.RoomTraceSessionRepositoryImpl.constructorParameters]]
@@ -490,6 +545,10 @@ TraceSessionEntity(
     createdAtEpochMs = createdAtEpochMs,
     endedAt = endedAt,
     durationMs = durationMs,
+    uploadState = uploadState.name,
+    uploadAttemptCount = uploadAttemptCount,
+    uploadFailureReason = uploadFailureReason,
+    uploadedAt = uploadedAt,
 )
 '''
 
@@ -509,6 +568,10 @@ StoredTraceSession(
     createdAtEpochMs = createdAtEpochMs,
     endedAt = endedAt,
     durationMs = durationMs,
+    uploadState = uploadState?.let(StoredTraceUploadState::valueOf) ?: StoredTraceUploadState.NOT_SCHEDULED,
+    uploadAttemptCount = uploadAttemptCount ?: 0,
+    uploadFailureReason = uploadFailureReason,
+    uploadedAt = uploadedAt,
 )
 '''
 
@@ -539,3 +602,50 @@ StoredTraceAction(
     payloadJson = payloadJson,
 )
 '''
+
+[data.repository.RoomTraceUploadStateRepositoryImpl]
+description = "Persists hosted-upload lifecycle in the shared private Room database."
+implements = "TraceUploadStateRepository"
+implementsImport = "dev.reprotrail.runtime.domain.repository.TraceUploadStateRepository"
+imports = ["dev.reprotrail.runtime.domain.model.StoredTraceUploadState"]
+
+[[data.repository.RoomTraceUploadStateRepositoryImpl.constructorParameters]]
+name = "database"
+type = "ReproTrailDatabase"
+import = "dev.reprotrail.runtime.data.database.ReproTrailDatabase"
+
+[[data.repository.RoomTraceUploadStateRepositoryImpl.functions]]
+name = "updateUploadState"
+suspend = true
+expression = '''
+run {
+    require(attemptCount >= 0) { "An upload attempt count cannot be negative." }
+    database.traceUploadDao().updateUploadState(
+        sessionId = sessionId,
+        state = state.name,
+        attemptCount = attemptCount,
+        failureReason = failureReason,
+        uploadedAt = uploadedAt,
+    )
+}
+'''
+
+[[data.repository.RoomTraceUploadStateRepositoryImpl.functions.parameters]]
+name = "sessionId"
+type = "String"
+
+[[data.repository.RoomTraceUploadStateRepositoryImpl.functions.parameters]]
+name = "state"
+type = "StoredTraceUploadState"
+
+[[data.repository.RoomTraceUploadStateRepositoryImpl.functions.parameters]]
+name = "attemptCount"
+type = "Int"
+
+[[data.repository.RoomTraceUploadStateRepositoryImpl.functions.parameters]]
+name = "failureReason"
+type = "String?"
+
+[[data.repository.RoomTraceUploadStateRepositoryImpl.functions.parameters]]
+name = "uploadedAt"
+type = "String?"
