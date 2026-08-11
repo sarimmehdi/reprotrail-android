@@ -10,7 +10,8 @@ android {
 }
 
 libraryConfig {
-    moduleType.set(ModuleType.DATA)
+    // This is an SDK-internal boundary, so it must not inherit the app feature's :utils dependency.
+    moduleType.set(ModuleType.SDK)
     internalDependencies.set(
         listOf(
             ":runtime:upload:domain",
