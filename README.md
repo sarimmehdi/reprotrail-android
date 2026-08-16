@@ -300,18 +300,10 @@ Do not enable this alpha for production users. A production rollout still requir
 
 ## Known limitations
 
-- Activity touch forwarding is explicit; there is no automatic Gradle bytecode instrumentation yet.
-- Only primary-pointer tap, long press, and swipe gestures are modeled; multi-touch cancels the current gesture.
-- Back presses, keyboard/IME actions, typed text, and semantic scroll commands are not captured.
-- An interrupted active session remains durable in Room but is not automatically resumed or exportable as a completed trace after process restart.
-- Export always targets the newest eligible completed session and replaces the previous local file.
-- Upload currently targets only the newest completed trace and requires an application-owned recorder to recreate the in-memory credential bridge before pending workers run.
-- There is no Android API for listing every retained trace or cancelling/deleting one pending upload yet.
-- The hosted backend's developer read/download/delete, retention, audit, reconciliation, provisioning, and deployment slices remain incomplete.
-- Environment parity is recorded but not enforced before replay.
-- The runtime is source-only and has no binary-compatibility guarantee.
-- Relocated Koin is isolated from host Koin, but its publication packaging is
-  not complete and Koin Embedded remains an upstream beta.
+The release-scoped impact, detection, mitigation, privacy consequences, and
+removal targets are maintained in [Known limitations](KNOWN_LIMITATIONS.md).
+These limitations keep the SDK restricted to synthetic or controlled internal
+testing until the production-beta release gates are satisfied.
 
 ## Development approach
 

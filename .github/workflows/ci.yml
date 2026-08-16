@@ -40,3 +40,6 @@ jobs:
 
       - name: Verify runtime dependency isolation
         run: ./scripts/verify-runtime-dependency-isolation.sh
+
+      - name: Verify release metadata
+        run: ./scripts/verify-release-metadata.sh
