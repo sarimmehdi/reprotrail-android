@@ -23,7 +23,7 @@ dependencies {
     implementation(libs.bundles.roomBundle)
     implementation(libs.kotlinxCoroutinesCoreLibrary)
     implementation(libs.kotlinxSerializationJsonLibrary)
-    implementation(libs.koinCoreLibrary)
+    implementation(libs.koinEmbeddedCoreLibrary)
     testImplementation(libs.kotlinxCoroutinesTestLibrary)
     testImplementation(libs.koinTestLibrary)
     testImplementation(libs.hiltAndroidLibrary)

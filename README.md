@@ -242,7 +242,17 @@ A Koin host can bind `ReproTrailIngestCredentialProvider` in its own application
 
 Each recorder internally uses `koinApplication`, following Koin's [context-isolation guidance](https://insert-koin.io/docs/reference/koin-core/context-isolation/). It does not start, read, stop, or mutate Koin's global context. Tests cover all four host models, independent recorder instances, and shutdown while a host Koin graph remains usable.
 
-Isolation is not dependency relocation. The alpha has a normal `koin-core` transitive dependency, so publication remains blocked until compatibility testing determines whether to relocate Koin, use Koin Embedded when stable, or remove internal DI. A consuming app is not yet promised compatibility with an arbitrary Koin version.
+The runtime uses Koin Embedded 3.5.6, which relocates `org.koin.*` to
+`embedded.koin.*`. The production runtime therefore exposes no standard Koin
+artifact or Koin type to a consuming application. Host-compatibility tests use
+standard Koin 4.2.2 alongside the relocated runtime and prove that the host
+global graph remains independent.
+
+Koin Embedded is still an upstream beta. Source builds resolve only its two core
+modules from Kotzilla's dedicated repository through an exclusive Gradle
+content filter. Release publication remains blocked until ReproTrail publishes
+or bundles a reviewed relocated artifact so consumers do not need to add that
+third-party repository themselves.
 
 ## Persistence, export, and deletion
 
@@ -300,6 +310,8 @@ Do not enable this alpha for production users. A production rollout still requir
 - The hosted backend's developer read/download/delete, retention, audit, reconciliation, provisioning, and deployment slices remain incomplete.
 - Environment parity is recorded but not enforced before replay.
 - The runtime is source-only and has no binary-compatibility guarantee.
+- Relocated Koin is isolated from host Koin, but its publication packaging is
+  not complete and Koin Embedded remains an upstream beta.
 
 ## Development approach
 

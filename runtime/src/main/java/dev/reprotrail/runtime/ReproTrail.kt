@@ -15,9 +15,9 @@ import dev.reprotrail.runtime.domain.repository.TraceUploadStateRepository
 import dev.reprotrail.runtime.upload.data.http.HttpTraceUploader
 import dev.reprotrail.runtime.upload.domain.TraceUploader
 import dev.reprotrail.runtime.upload.domain.credential.IngestCredentialProvider
-import org.koin.core.KoinApplication
-import org.koin.dsl.koinApplication
-import org.koin.dsl.module
+import embedded.koin.core.KoinApplication
+import embedded.koin.dsl.koinApplication
+import embedded.koin.dsl.module
 import java.io.File
 import java.net.URI
 import java.util.UUID

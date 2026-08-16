@@ -17,6 +17,7 @@ immutableCollectionsVersion = "0.5.1"
 kspVersion = "2.3.6"
 roomVersion = "2.8.4"
 koinVersion = "4.2.2"
+embeddedKoinVersion = "3.5.6"
 hiltVersion = "2.60.1"
 datastoreVersion = "1.2.1"
 kotlinxSerializationVersion = "1.11.0"
@@ -102,6 +103,7 @@ androidxRoomRuntimeLibrary = { group = "androidx.room", name = "room-runtime", v
 androidxRoomKtxLibrary = { group = "androidx.room", name = "room-ktx", version.ref = "roomVersion" }
 androidxRoomCompilerLibrary = { group = "androidx.room", name = "room-compiler", version.ref = "roomVersion" }
 koinCoreLibrary = { group = "io.insert-koin", name = "koin-core", version.ref = "koinVersion" }
+koinEmbeddedCoreLibrary = { group = "io.insert-koin", name = "embedded-koin-core", version.ref = "embeddedKoinVersion" }
 koinTestLibrary = { group = "io.insert-koin", name = "koin-test", version.ref = "koinVersion" }
 koinCoreCoroutinesLibrary = { group = "io.insert-koin", name = "koin-core-coroutines", version.ref = "koinVersion" }
 koinAndroidLibrary = { group = "io.insert-koin", name = "koin-android", version.ref = "koinVersion" }

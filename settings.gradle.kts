@@ -14,6 +14,18 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = "KoinEmbedded"
+                    url = uri("https://repository.kotzilla.io/repository/Koin-Embedded/")
+                }
+            }
+            filter {
+                includeModule("io.insert-koin", "embedded-koin-core")
+                includeModule("io.insert-koin", "embedded-koin-core-jvm")
+            }
+        }
     }
 }
 
